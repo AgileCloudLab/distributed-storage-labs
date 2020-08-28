@@ -1,2 +1,2 @@
-# distributed-storage-course
-Code repository for the Labs of the Distributed Storage course
+# Distributed Storage Labs
+This repository stores the source code for the Labs of the Distributed Storage course at Aarhus University.
