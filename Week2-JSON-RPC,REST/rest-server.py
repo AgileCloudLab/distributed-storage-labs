@@ -1,3 +1,9 @@
+"""
+Aarhus University - Distributed Storage course - Lab 2
+
+REST API server
+
+"""
 from flask import Flask, make_response, g, request, send_file
 import sqlite3
 import base64
