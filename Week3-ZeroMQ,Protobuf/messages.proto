@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+message file
+{
+    uint32 id = 1;
+    string name = 2;
+    uint64 size = 3;
+    string type = 4; // file type, e.g. "application/pdf"
+    uint64 created = 5; // Unix Timestamp (number of seconds since 01/01/1970)
+}
