@@ -1,0 +1,40 @@
+\input{preamble}
+
+\title{Distributed Storage Lab - Week 1}
+
+
+
+\begin{document}
+
+\maketitle
+
+\section*{Prerequisites}
+\begin{itemize}
+\item Python 3 is installed on your computer (preferably 3.6 or newer)
+\item You have a basic understanding of Python and you are able to write Python code. It is okay if you need to look up things sometimes
+\item You are familiar with the material of Lecture 1
+\item Reommended reading before the lab: \href{https://docs.python.org/3.7/howto/sockets.html}{Python socket programming howto}
+\end{itemize}
+
+\section{Goals}
+In this lab, we will learn how to use \textbf{sockets} in Python to send messages and files between a simple client and a server, locally. We will extend the example TCP server that was introduced in the lecture, and implement the following functionality:
+
+\begin{itemize}
+\item Socket Server and Client: text message
+  \begin{itemize}
+  \item Both on same machine: use localhost
+  \item Client sends message, e.g., name
+  \item Server receives message, replies: "I have received: " \& the message. Ends connection
+  \item Server reports IP and message in the terminal
+  \item Test with colleagues: Use your client to send data to their server
+  \end{itemize}
+\item Socket Server and Client: File transmission
+  \begin{itemize}
+  \item Instead of a message, transmit contents of a file and save as file in the server
+  \end{itemize}
+\end{itemize}
+
+
+
+
+\end{document}
