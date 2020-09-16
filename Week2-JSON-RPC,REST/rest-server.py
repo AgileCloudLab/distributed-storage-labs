@@ -28,7 +28,7 @@ def close_db(e=None):
 
     if db is not None:
         db.close()
-''
+
 app = Flask(__name__)
 app.teardown_appcontext(close_db)
 
@@ -146,7 +146,7 @@ def write_file(data, filename=None):
 
 
 
-@app.route('/files',  methods=['POST'])
+@app.route('/files', methods=['POST'])
 def add_files():
     payload = request.get_json()
     filename = payload.get('filename')
@@ -171,8 +171,6 @@ def add_files():
 
 
 
-
-
 import logging
 @app.errorhandler(500)
 def server_error(e):
@@ -180,6 +178,3 @@ def server_error(e):
     return make_response({"error": str(e)}, 500)
 
 app.run(host="localhost", port=9000)
-
-
-

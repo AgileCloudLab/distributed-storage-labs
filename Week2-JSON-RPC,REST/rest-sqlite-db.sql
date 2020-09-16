@@ -3,6 +3,6 @@ CREATE TABLE `file` (
    `filename` TEXT,
    `size` INTEGER,
    `content_type` TEXT,
-   `created` DATETIME DEFAULT CURRENT_TIMESTAMP ,
+   `created` DATETIME DEFAULT CURRENT_TIMESTAMP,
    `blob_name` TEXT
 );
