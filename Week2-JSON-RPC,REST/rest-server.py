@@ -9,6 +9,7 @@ import sqlite3
 import base64
 import random, string
 import logging
+import os
 
 
 def get_db():
@@ -52,7 +53,6 @@ def list_files():
 
 @app.route('/files/<int:file_id>',  methods=['GET'])
 def download_file(file_id):
-    print("Download file: ", id)
 
     db = get_db()
     cursor = db.execute("SELECT * FROM `file` WHERE `id`=?", [file_id])
@@ -67,6 +67,53 @@ def download_file(file_id):
     print("File requested: {}".format(f))
 
     return send_file(f['blob_name'], mimetype=f['content_type'])
+#
+
+# HTTP HEAD requests are served by the GET endpoint of the same URL,
+# so we'll introduce a new endpoint URL for requesting file metadata.
+@app.route('/files/<int:file_id>/info',  methods=['GET'])
+def get_file_metadata(file_id):
+
+    db = get_db()
+    cursor = db.execute("SELECT * FROM `file` WHERE `id`=?", [file_id])
+    if not cursor: 
+        return make_response({"message": "Error connecting to the database"}, 500)
+    
+    f = cursor.fetchone()
+    # Convert to a Python dictionary
+    f = dict(f)
+
+    print("File: %s" % f)
+
+    return make_response(f)
+#
+
+
+@app.route('/files/<int:file_id>',  methods=['DELETE'])
+def delete_file(file_id):
+
+    db = get_db()
+    cursor = db.execute("SELECT * FROM `file` WHERE `id`=?", [file_id])
+    if not cursor: 
+        return make_response({"message": "Error connecting to the database"}, 500)
+    
+    f = cursor.fetchone()
+    if not f:
+        return make_response({"message": "File {} not found".format(file_id)}, 404)
+
+    # Convert to a Python dictionary
+    f = dict(f)
+    print("File to delete: %s" % f)
+
+    # Delete the file contents with os.remove()
+    os.remove(f['blob_name'])
+
+    # Delete the file record from the DB
+    db.execute("DELETE FROM `file` WHERE `id`=?", [file_id])
+    db.commit()
+
+    # Return empty 200 Ok response
+    return make_response('')
 #
 
 def write_file(data, filename=None):
