@@ -69,5 +69,28 @@ while True:
         # Send response (just the file name)
         sender.send_string(task.filename)
     
+    elif command == 'GET_DATA':
+
+        # Parse the Protobuf message from the second frame
+        task = messages_pb2.storedata_request()
+        task.ParseFromString(msg[1])
+
+        filename = task.filename
+        print("File request: %s" % filename)
+
+        # Try to load the requested file from the local file system,
+        # send response only if found
+        try:
+            with open(filename, "rb") as in_file:
+                print("Found file %s, sending it back" % filename)
+
+                sender.send_multipart([
+                    bytes(filename, 'utf-8'),
+                    in_file.read()
+                ])
+        except FileNotFoundError:
+            # This is OK here
+            pass
+
     else:
         print("Unknown command: %s" % command)

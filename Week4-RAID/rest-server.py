@@ -14,6 +14,7 @@ import time
 import zmq
 import math
 import messages_pb2
+import io
 
 
 def get_db():
@@ -87,9 +88,52 @@ def download_file(file_id):
     # Convert to a Python dictionary
     f = dict(f)
 
-    print("File requested: {}".format(f))
+    print("File requested: {}".format(f['filename']))
 
-    return send_file(f['blob_name'], mimetype=f['content_type'])
+    # Select one chunk of each half
+    part1_filenames = f['part1_filenames'].split(',')
+    part2_filenames = f['part2_filenames'].split(',')
+
+    part1_filename = part1_filenames[random.randint(0, len(part1_filenames)-1)]
+    part2_filename = part2_filenames[random.randint(0, len(part2_filenames)-1)]
+
+    # Reqest the random selected replica of both chunks in parallel
+    task1 = messages_pb2.getdata_request()
+    task1.filename = part1_filename
+    send_task_socket.send_multipart([
+        bytes('GET_DATA', 'utf-8'),
+        task1.SerializeToString()
+    ])
+    task2 = messages_pb2.getdata_request()
+    task2.filename = part2_filename
+    send_task_socket.send_multipart([
+        bytes('GET_DATA', 'utf-8'),
+        task2.SerializeToString()
+    ])
+
+    # Receive both chunks and insert them to 
+    file_data_parts = [None, None]
+    for _ in range(2):
+        result = response_socket.recv_multipart()
+        # First frame: file name (string)
+        filename_received = result[0].decode('utf-8')
+        # Second frame: data
+        chunk_data = result[1]
+
+        print("Received %s" % filename_received)
+
+        if filename_received == part1_filename:
+            # The first part was received
+            file_data_parts[0] = chunk_data
+        else:
+            # The second part was received
+            file_data_parts[1] = chunk_data
+
+    print("Both chunks received successfully")
+
+    # Combine the parts and serve the file
+    file_data = file_data_parts[0] + file_data_parts[1]
+    return send_file(io.BytesIO(file_data), mimetype=f['content_type'])
 #
 
 # HTTP HEAD requests are served by the GET endpoint of the same URL,
@@ -143,8 +187,6 @@ def random_string(length=8):
     return ''.join([random.SystemRandom().choice(string.ascii_letters + string.digits) for n in range(length)])
 
 
-
-
 @app.route('/files', methods=['POST'])
 def add_files():
     payload = request.get_json()
@@ -166,21 +208,21 @@ def add_files():
     print("Filenames for part 2: %s" % file_data_2_names)
     
     # 
-    for filename in file_data_1_names:
+    for name in file_data_1_names:
         task = messages_pb2.storedata_request()
-        task.filename = filename
+        task.filename = name
         send_task_socket.send_multipart([
             bytes('STORE_DATA', 'utf-8'),
-            bytes(task.SerializeToString()),
+            task.SerializeToString(),
             file_data_1
         ])
 
-    for filename in file_data_2_names:
+    for name in file_data_2_names:
         task = messages_pb2.storedata_request()
-        task.filename = filename
+        task.filename = name
         send_task_socket.send_multipart([
             bytes('STORE_DATA', 'utf-8'),
-            bytes(task.SerializeToString()),
+            task.SerializeToString(),
             file_data_2
         ])
     
