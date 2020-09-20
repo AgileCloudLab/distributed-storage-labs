@@ -1,10 +1,28 @@
+"""
+Aarhus University - Distributed Storage course - Lab 4
+
+Storage Node
+"""
 import zmq
-import time
 import messages_pb2
+
+import sys
+import os
+import random
+import string
+
 
 
 def random_string(length=8):
+    """
+    Returns a random alphanumeric string of the given length. 
+    Only lowercase ascii letters and numbers are used.
+
+    :param length: Length of the requested random string 
+    :return: The random generated string
+    """
     return ''.join([random.SystemRandom().choice(string.ascii_letters + string.digits) for n in range(length)])
+
 
 def write_file(data, filename=None):
     """
@@ -31,58 +49,96 @@ def write_file(data, filename=None):
         return None
     
     return filename
-#
+
+# Read the folder name where chunks should be stored from the first program argument
+# (or use the current folder if none was given)
+data_folder = sys.argv[1] if len(sys.argv) > 1 else "./"
+if data_folder != "./":
+    # Try to create the folder  
+    try:
+        os.mkdir('./'+data_folder)
+    except FileExistsError as _:
+        # OK, the folder exists 
+        pass
+print("Data folder: %s" % data_folder)
+
 
 context = zmq.Context()
 
-# Socket to receive tasks from the ventilator
-pull_address = "tcp://localhost:5557"
+# Ask the user to input the last segment of the server IP address
+server_address = input("Server address: 192.168.0.___ ")
+
+# Socket to receive Store Chunk messages from the controller
+pull_address = "tcp://192.168.0."+server_address+":5557"
+#pull_address = "tcp://localhost:5557"
 receiver = context.socket(zmq.PULL)
 receiver.connect(pull_address)
 print("Listening on %s" % pull_address)
 
-# Socket to send results to the sink
+# Socket to send results to the controller
 sender = context.socket(zmq.PUSH)
-sender.connect("tcp://localhost:5558")
+sender.connect("tcp://192.168.0."+server_address+":5558")
+#sender.connect("tcp://localhost:5558")
 
-# Process tasks forever
+# Socket to receive Get Chunk messages from the controller
+subscriber = context.socket(zmq.SUB)
+subscriber.connect("tcp://192.168.0."+server_address+":5559")
+#subscriber.connect("tcp://localhost:5559")
+# Receive every message (empty subscription)
+subscriber.setsockopt(zmq.SUBSCRIBE, b'')
+
+# Use a Poller to monitor two sockets at the same time
+poller = zmq.Poller()
+poller.register(receiver, zmq.POLLIN)
+poller.register(subscriber, zmq.POLLIN)
+
 while True:
-    msg = receiver.recv_multipart()
+    try:
+        # Poll all sockets
+        socks = dict(poller.poll())
+    except KeyboardInterrupt:
+        break
+    pass
 
-    command = msg[0].decode('utf-8')
+    # At this point one or multiple sockets may have received a message
 
-    if command == 'STORE_DATA':
-        
-        # Parse the Protobuf message from the second frame
+    if receiver in socks:
+        # Incoming message on the 'receiver' socket where we get tasks to store a chunk
+        msg = receiver.recv_multipart()
+        # Parse the Protobuf message from the first frame
         task = messages_pb2.storedata_request()
-        task.ParseFromString(msg[1])
-        
-        # The data to store is the third frame
-        data = msg[2]
+        task.ParseFromString(msg[0])
 
-        print('File to save: %s' % task.filename)
-        print("File size: %d" % len(data))
+        # The data is the second frame
+        data = msg[1]
 
-        # Store the file with the 
-        write_file(data, task.filename)
-    
+        print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
+
+        # Store the chunk with the given filename
+        chunk_local_path = data_folder+'/'+task.filename
+        write_file(data, chunk_local_path)
+        print("Chunk saved to %s" % chunk_local_path)
+
         # Send response (just the file name)
         sender.send_string(task.filename)
-    
-    elif command == 'GET_DATA':
+        
 
-        # Parse the Protobuf message from the second frame
-        task = messages_pb2.storedata_request()
-        task.ParseFromString(msg[1])
+    if subscriber in socks:
+        # Incoming message on the 'subscriber' socket where we get retrieve requests
+        msg = subscriber.recv()
+        
+        # Parse the Protobuf message from the first frame
+        task = messages_pb2.getdata_request()
+        task.ParseFromString(msg)
 
         filename = task.filename
-        print("File request: %s" % filename)
+        print("Data chunk request: %s" % filename)
 
         # Try to load the requested file from the local file system,
         # send response only if found
         try:
-            with open(filename, "rb") as in_file:
-                print("Found file %s, sending it back" % filename)
+            with open(data_folder+'/'+filename, "rb") as in_file:
+                print("Found chunk %s, sending it back" % filename)
 
                 sender.send_multipart([
                     bytes(filename, 'utf-8'),
@@ -91,6 +147,4 @@ while True:
         except FileNotFoundError:
             # This is OK here
             pass
-
-    else:
-        print("Unknown command: %s" % command)
+#
