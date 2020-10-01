@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+Week6-KodoRS/files.db
+Week2-JSON-RPC,REST/files.db
+Week4-RAID/files.db
