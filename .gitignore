@@ -6,6 +6,10 @@ __pycache__/
 # C extensions
 *.so
 
+# emacs tmp/backup files
+*#
+*~
+
 # Distribution / packaging
 .Python
 build/
@@ -130,3 +134,5 @@ dmypy.json
 Week6-KodoRS/files.db
 Week2-JSON-RPC,REST/files.db
 Week4-RAID/files.db
+Week7-RS-Repair/files.db
+
