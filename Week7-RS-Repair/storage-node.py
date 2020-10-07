@@ -26,6 +26,20 @@ if data_folder != "./":
         pass
 print("Data folder: %s" % data_folder)
 
+# Check whether the node has an id. If it doesn't, generate one and save it to disk.
+try:
+    with open(data_folder+'/.id', "r") as id_file:
+        node_id = id_file.read()
+        print("ID read from file: %s" % node_id)
+
+except FileNotFoundError:
+    # This is OK, this must be the first time the node was started
+    node_id = random_string(8)
+    # Save it to file for the next start
+    with open(data_folder+'/.id', "w") as id_file:
+        id_file.write(node_id)
+        print("New ID generated and saved to file: %s" % node_id)
+
 if is_raspberry_pi():
     # On the Raspberry Pi: ask the user to input the last segment of the server IP address
     server_address = input("Server address: 192.168.0.___ ")
@@ -151,7 +165,7 @@ while True:
         response = messages_pb2.fragment_status_response()
         response.fragment_name = fragment_name
         response.is_present = fragment_found
-        response.node_id = "node_id"
+        response.node_id = node_id
 
         repair_sender.send(response.SerializeToString())
 #
