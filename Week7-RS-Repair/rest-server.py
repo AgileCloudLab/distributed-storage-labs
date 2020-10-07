@@ -283,9 +283,11 @@ def rs_repair():
     rs_files = cursor.fetchall()
     rs_files = [dict(file) for file in rs_files]
     
-    fragments_repaired = reedsolomon.start_repair_process(rs_files, repair_socket, repair_response_socket)
+    fragments_missing, fragments_repaired = reedsolomon.start_repair_process(rs_files, repair_socket,
+                                                                             repair_response_socket)
     
-    return make_response({"fragments_repaired": fragments_repaired})
+    return make_response({"fragments_missing": fragments_missing,
+                          "fragments_repaired": fragments_repaired})
 #
 
 

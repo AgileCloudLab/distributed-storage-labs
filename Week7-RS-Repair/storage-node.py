@@ -139,8 +139,10 @@ while True:
 
         fragment_name = task.fragment_name
         # Check whether the fragment is on the disk
-        fragment_found = os.path.exists(fragment_name)
-        if fragment_found == true:
+        fragment_found = os.path.exists(data_folder+'/'+fragment_name) and \
+                         os.path.isfile(data_folder+'/'+fragment_name)
+
+        if fragment_found == True:
             print("Status request for fragment: %s - Found" % fragment_name)
         else:
             print("Status request for fragment: %s - Not found" % fragment_name)

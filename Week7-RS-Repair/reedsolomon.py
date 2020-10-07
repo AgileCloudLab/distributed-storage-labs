@@ -135,6 +135,7 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
 
 def start_repair_process(files, repair_socket, repair_response_socket):
     number_of_missing_fragments = 0
+    number_of_repaired_fragments = 0
 
     #Check that each file is actually stored on the storage nodes
     for file in files:
@@ -142,7 +143,11 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         storage_details = json.loads(file["storage_details"])
 
         #Iterate over each coded fragment to check that it is not missing
+        nodes = set() # list of all storage nodes
+        nodes_with_fragment = set() # list of storage nodes with fragment
         coded_fragments = storage_details["coded_fragments"]
+        lost_fragments = []
+        existing_fragments = []
         for fragment in coded_fragments:
             task = messages_pb2.fragment_status_request()
             task.fragment_name = fragment
@@ -150,15 +155,43 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 task.SerializeToString()
             )
 
+            fragment_found = False
             # Wait until we receive a response from each node
             for task_nbr in range(STORAGE_NODES_NUM):
-                resp = repair_response_socket.recv_string()
-                print('Received: %s' % resp)
+                msg = repair_response_socket.recv()
+                response = messages_pb2.fragment_status_response()
+                response.ParseFromString(msg)
 
-    #For each missing fragment, retrieve sufficient fragments to decode
+                #Build a set of nodes
+                nodes.add(response.node_id)
+                if response.is_present == True:
+                    nodes_with_fragment.add(response.node_id)
+                    existing_fragments.append(fragment)
+                    fragment_found = True
 
+            if fragment_found == False:
+                print("Fragment %s lost" % fragment)
+                lost_fragments.append(fragment)
+                number_of_missing_fragments += 1
+            else:
+                print("Fragment %s OK" % fragment)
 
-    #Re-encode the missing fragment
+        # If we have lost fragments, we figure out where they were stored
+        # we assume that each node stored exactly 1 or 0 fragments
+        nodes_without_fragment = list(nodes.difference(nodes_with_fragment))
+        if len(lost_fragments) > 0:
 
+            # Check that enough fragments still remain to be able to repair
+            if len(lost_fragments) > storage_details["max_erasures"]:
+                print("Too many lost fragments: %s. Unable to repair. " % len(lost_fragments))
+                continue
 
-    return number_of_missing_fragments
+            # Retrieve sufficient fragments to decode
+            # TODO
+
+            # Re-encode each missing fragment: foreach loop
+            for lost_fragment in lost_fragments:
+                number_of_repaired_fragments += 1
+                # TODO
+
+    return number_of_missing_fragments, number_of_repaired_fragments
