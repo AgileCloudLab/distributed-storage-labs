@@ -55,10 +55,17 @@ response_socket.bind("tcp://*:5558")
 data_req_socket = context.socket(zmq.PUB)
 data_req_socket.bind("tcp://*:5559")
 
+# Publisher socket for fragment repair broadcasts
+repair_socket = context.socket(zmq.PUB)
+repair_socket.bind("tcp://*:5560")
+
+# Socket to receive repair messages from Storage Nodes
+repair_response_socket = context.socket(zmq.PULL)
+repair_response_socket.bind("tcp://*:5561")
+
 # Wait for all workers to start and connect. 
 time.sleep(1)
-print("Listening to ZMQ messages on tcp://*:5558")
-
+print("Listening to ZMQ messages on tcp://*:5558 and tcp://*:5561")
 
 # Instantiate the Flask app (must be before the endpoint functions)
 app = Flask(__name__)
@@ -269,14 +276,14 @@ def rs_repair():
 
     #Retrieve the list of files stored using Reed-Solomon from the database
     db = get_db()
-    cursor = db.execute("SELECT `storage_details` FROM `file` WHERE `storage_mode`=`erasure_coding_rs`")
+    cursor = db.execute("SELECT `storage_details` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")
     if not cursor: 
         return make_response({"message": "Error connecting to the database"}, 500)
     
-    files = cursor.fetchall()
-    files = [dict(file) for file in files]
+    rs_files = cursor.fetchall()
+    rs_files = [dict(file) for file in rs_files]
     
-    fragments_repaired = reedsolomon.start_repair_process(files)
+    fragments_repaired = reedsolomon.start_repair_process(rs_files, repair_socket, repair_response_socket)
     
     return make_response({"fragments_repaired": fragments_repaired})
 #

@@ -4,6 +4,7 @@ import random
 import copy # for deepcopy
 from utils import random_string
 import messages_pb2
+import json
 
 STORAGE_NODES_NUM = 4
 
@@ -132,11 +133,27 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
 #
 
 
-def start_repair_process():
+def start_repair_process(files, repair_socket, repair_response_socket):
     number_of_missing_fragments = 0
 
-    #First task is to retrieve a list of missing fragments
-    
+    #Check that each file is actually stored on the storage nodes
+    for file in files:
+        #We parse the JSON into a python dictionary
+        storage_details = json.loads(file["storage_details"])
+
+        #Iterate over each coded fragment to check that it is not missing
+        coded_fragments = storage_details["coded_fragments"]
+        for fragment in coded_fragments:
+            task = messages_pb2.fragment_status_request()
+            task.fragment_name = fragment
+            repair_socket.send(
+                task.SerializeToString()
+            )
+
+            # Wait until we receive a response from each node
+            for task_nbr in range(STORAGE_NODES_NUM):
+                resp = repair_response_socket.recv_string()
+                print('Received: %s' % resp)
 
     #For each missing fragment, retrieve sufficient fragments to decode
 
@@ -144,4 +161,4 @@ def start_repair_process():
     #Re-encode the missing fragment
 
 
-    return number_of_missing_framents
+    return number_of_missing_fragments

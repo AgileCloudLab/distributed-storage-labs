@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0emessages.proto\"%\n\x11storedata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"#\n\x0fgetdata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\tb\x06proto3'
+  serialized_pb=b'\n\x0emessages.proto\"%\n\x11storedata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"#\n\x0fgetdata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"0\n\x17\x66ragment_status_request\x12\x15\n\rfragment_name\x18\x01 \x01(\t\"V\n\x18\x66ragment_status_response\x12\x15\n\rfragment_name\x18\x01 \x01(\t\x12\x12\n\nis_present\x18\x02 \x01(\x08\x12\x0f\n\x07node_id\x18\x03 \x01(\tb\x06proto3'
 )
 
 
@@ -88,8 +88,88 @@ _GETDATA_REQUEST = _descriptor.Descriptor(
   serialized_end=92,
 )
 
+
+_FRAGMENT_STATUS_REQUEST = _descriptor.Descriptor(
+  name='fragment_status_request',
+  full_name='fragment_status_request',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='fragment_name', full_name='fragment_status_request.fragment_name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=94,
+  serialized_end=142,
+)
+
+
+_FRAGMENT_STATUS_RESPONSE = _descriptor.Descriptor(
+  name='fragment_status_response',
+  full_name='fragment_status_response',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='fragment_name', full_name='fragment_status_response.fragment_name', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='is_present', full_name='fragment_status_response.is_present', index=1,
+      number=2, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='node_id', full_name='fragment_status_response.node_id', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=144,
+  serialized_end=230,
+)
+
 DESCRIPTOR.message_types_by_name['storedata_request'] = _STOREDATA_REQUEST
 DESCRIPTOR.message_types_by_name['getdata_request'] = _GETDATA_REQUEST
+DESCRIPTOR.message_types_by_name['fragment_status_request'] = _FRAGMENT_STATUS_REQUEST
+DESCRIPTOR.message_types_by_name['fragment_status_response'] = _FRAGMENT_STATUS_RESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 storedata_request = _reflection.GeneratedProtocolMessageType('storedata_request', (_message.Message,), {
@@ -105,6 +185,20 @@ getdata_request = _reflection.GeneratedProtocolMessageType('getdata_request', (_
   # @@protoc_insertion_point(class_scope:getdata_request)
   })
 _sym_db.RegisterMessage(getdata_request)
+
+fragment_status_request = _reflection.GeneratedProtocolMessageType('fragment_status_request', (_message.Message,), {
+  'DESCRIPTOR' : _FRAGMENT_STATUS_REQUEST,
+  '__module__' : 'messages_pb2'
+  # @@protoc_insertion_point(class_scope:fragment_status_request)
+  })
+_sym_db.RegisterMessage(fragment_status_request)
+
+fragment_status_response = _reflection.GeneratedProtocolMessageType('fragment_status_response', (_message.Message,), {
+  'DESCRIPTOR' : _FRAGMENT_STATUS_RESPONSE,
+  '__module__' : 'messages_pb2'
+  # @@protoc_insertion_point(class_scope:fragment_status_response)
+  })
+_sym_db.RegisterMessage(fragment_status_response)
 
 
 # @@protoc_insertion_point(module_scope)

@@ -32,11 +32,15 @@ if is_raspberry_pi():
     pull_address = "tcp://192.168.0."+server_address+":5557"
     sender_address = "tcp://192.168.0."+server_address+":5558"
     subscriber_address = "tcp://192.168.0."+server_address+":5559"
+    repair_subscriber_address = "tcp://192.168.0."+server_address+":5560"
+    repair_sender_address = "tcp://192.168.0."+server_address+":5561"
 else:
     # On the local computer: use localhost
     pull_address = "tcp://localhost:5557"
     push_address = "tcp://localhost:5558"
     subscriber_address = "tcp://localhost:5559"
+    repair_subscriber_address = "tcp://localhost:5560"
+    repair_sender_address = "tcp://localhost:5561"
     
 
 context = zmq.Context()
@@ -53,11 +57,21 @@ subscriber.connect(subscriber_address)
 # Receive every message (empty subscription)
 subscriber.setsockopt(zmq.SUBSCRIBE, b'')
 
+# Socket to receive Repair request messages from the controller
+repair_subscriber = context.socket(zmq.SUB)
+repair_subscriber.connect(repair_subscriber_address)
+# Receive every message (empty subscription)
+repair_subscriber.setsockopt(zmq.SUBSCRIBE, b'')
+# Socket to send repair results to the controller
+repair_sender = context.socket(zmq.PUSH)
+repair_sender.connect(repair_sender_address)
 
-# Use a Poller to monitor two sockets at the same time
+
+# Use a Poller to monitor three sockets at the same time
 poller = zmq.Poller()
 poller.register(receiver, zmq.POLLIN)
 poller.register(subscriber, zmq.POLLIN)
+poller.register(repair_subscriber, zmq.POLLIN)
 
 while True:
     try:
@@ -114,4 +128,28 @@ while True:
         except FileNotFoundError:
             # This is OK here
             pass
+
+    if repair_subscriber in socks:
+        # Incoming message on the 'repair_subscriber' socket where we get repair requests
+        msg = repair_subscriber.recv()
+
+        # Parse the Protobuf message from the first frame
+        task = messages_pb2.fragment_status_request()
+        task.ParseFromString(msg)
+
+        fragment_name = task.fragment_name
+        # Check whether the fragment is on the disk
+        fragment_found = os.path.exists(fragment_name)
+        if fragment_found == true:
+            print("Status request for fragment: %s - Found" % fragment_name)
+        else:
+            print("Status request for fragment: %s - Not found" % fragment_name)
+
+        # Send the response
+        response = messages_pb2.fragment_status_response()
+        response.fragment_name = fragment_name
+        response.is_present = fragment_found
+        response.node_id = "node_id"
+
+        repair_sender.send(response.SerializeToString())
 #
