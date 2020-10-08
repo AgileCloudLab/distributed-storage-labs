@@ -151,7 +151,12 @@ def start_repair_process(files, repair_socket, repair_response_socket, data_req_
         for fragment in coded_fragments:
             task = messages_pb2.fragment_status_request()
             task.fragment_name = fragment
-            repair_socket.send(b"all_nodes" + task.SerializeToString())
+            header = messages_pb2.header()
+            header.request_type = messages_pb2.FRAGMENT_STATUS_REQ
+
+            repair_socket.send_multipart([b"all_nodes",
+                                          header.SerializeToString(),
+                                          task.SerializeToString()])
 
             fragment_found = False
             # Wait until we receive a response from each node
@@ -208,22 +213,29 @@ def start_repair_process(files, repair_socket, repair_response_socket, data_req_
                 # Generate a coded fragment with these coefficients
                 # (trim the coeffs to the actual length we need)
                 symbol = encoder.produce_symbol(coefficients[:symbols])
-                # Save with the same name as before
-                fragment_names.append(lost_fragment)
 
+                # Save with the same name as before
                 # Send a Protobuf STORE DATA request to the Storage Nodes
                 task = messages_pb2.storedata_request()
-                task.filename = name
-'''
-                repair_socket.send_multipart([
-                    task.SerializeToString(),
-                    bytearray(symbol)
+                task.filename = lost_fragment
+
+                header = messages_pb2.header()
+                header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+
+                node_id = nodes_without_fragment[number_of_repaired_fragments]
+
+                #Use the node_id as the topic
+                repair_socket.send_multipart([node_id.encode('UTF-8'),
+                                              header.SerializeToString(),
+                                              task.SerializeToString(),
+                                              bytearray(symbol)
                 ])
+                number_of_repaired_fragments += 1
 
             # Wait until we receive a response for every fragment
             for task_nbr in range(len(lost_fragments)):
                 resp = response_socket.recv_string()
                 print('Received: %s' % resp)
-                number_of_repaired_fragments += 1
-'''
+
+
     return number_of_missing_fragments, number_of_repaired_fragments

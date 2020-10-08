@@ -34,7 +34,7 @@ try:
 
 except FileNotFoundError:
     # This is OK, this must be the first time the node was started
-    node_id = random_string(9)
+    node_id = random_string(8)
     # Save it to file for the next start
     with open(data_folder+'/.id', "w") as id_file:
         id_file.write(node_id)
@@ -147,29 +147,82 @@ while True:
 
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket where we get repair requests
-        msg = repair_subscriber.recv()
+        # Parse the multi-part message
+        print("Something arrived")
+        msg = repair_subscriber.recv_multipart()
+
         # Retrieve the topic that was sent as a prefix
-        topic = str(msg[:9])
+        topic = str(msg[0])
+        
+        # Parse the header from the first frame, taking care to omit the topic
+        header = messages_pb2.header()
+        header.ParseFromString(msg[1])
 
-        # Parse the Protobuf message from the first frame, taking care to omit the topic
-        task = messages_pb2.fragment_status_request()
-        task.ParseFromString(msg[9:])
+        #Parse the actual message based on the header
+        #Fragment Status requests
+        if header.request_type == messages_pb2.FRAGMENT_STATUS_REQ:
+            task = messages_pb2.fragment_status_request()
+            task.ParseFromString(msg[2])
 
-        fragment_name = task.fragment_name
-        # Check whether the fragment is on the disk
-        fragment_found = os.path.exists(data_folder+'/'+fragment_name) and \
-                         os.path.isfile(data_folder+'/'+fragment_name)
+            fragment_name = task.fragment_name
+            # Check whether the fragment is on the disk
+            fragment_found = os.path.exists(data_folder+'/'+fragment_name) and \
+                             os.path.isfile(data_folder+'/'+fragment_name)
+            
+            if fragment_found == True:
+                print("Status request for fragment: %s - Found" % fragment_name)
+            else:
+                print("Status request for fragment: %s - Not found" % fragment_name)
 
-        if fragment_found == True:
-            print("Status request for fragment: %s - Found" % fragment_name)
+            # Send the response
+            response = messages_pb2.fragment_status_response()
+            response.fragment_name = fragment_name
+            response.is_present = fragment_found
+            response.node_id = node_id
+
+            repair_sender.send(response.SerializeToString())
+
+        # Fragment data request - same implementation as serving normal data
+        # requests, except for the different socket the response is sent on
+        elif header.request_type == messages_pb2.FRAGMENT_DATA_REQ:
+            task = messages_pb2.getdata_request()
+            task.ParseFromString(msg[2])
+
+            filename = task.filename
+            print("Data chunk request: %s" % filename)
+
+            # Try to load the requested file from the local file system,
+            # send response only if found
+            try:
+                with open(data_folder+'/'+filename, "rb") as in_file:
+                    print("Found chunk %s, sending it back" % filename)
+                    
+                    repair_sender.send_multipart([
+                        bytes(filename, 'utf-8'),
+                        in_file.read()
+                    ])
+            except FileNotFoundError:
+                # This is OK here
+                pass
+
+        #Fragment sore request
+        elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
+            task = messages_pb2.storedata_request()
+            task.ParseFromString(msg[2])
+
+            # The data is the second frame
+            data = msg[3]
+
+            print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
+            
+            # Store the chunk with the given filename
+            chunk_local_path = data_folder+'/'+task.filename
+            write_file(data, chunk_local_path)
+            print("Chunk saved to %s" % chunk_local_path)
+
+            # Send response (just the file name)
+            sender.send_string(task.filename)
+
         else:
-            print("Status request for fragment: %s - Not found" % fragment_name)
-
-        # Send the response
-        response = messages_pb2.fragment_status_response()
-        response.fragment_name = fragment_name
-        response.is_present = fragment_found
-        response.node_id = node_id
-
-        repair_sender.send(response.SerializeToString())
+            print("Message type not supported")
 #
