@@ -21,3 +21,8 @@ message fragment_status_response
     bool is_present = 2;
     string node_id = 3;
 }
+
+message header
+{
+    string type = 1;
+}

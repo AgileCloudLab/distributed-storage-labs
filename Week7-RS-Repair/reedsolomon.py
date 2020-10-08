@@ -151,9 +151,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         for fragment in coded_fragments:
             task = messages_pb2.fragment_status_request()
             task.fragment_name = fragment
-            repair_socket.send(
-                task.SerializeToString()
-            )
+            repair_socket.send(b"all_nodes" + task.SerializeToString())
 
             fragment_found = False
             # Wait until we receive a response from each node

@@ -34,7 +34,7 @@ try:
 
 except FileNotFoundError:
     # This is OK, this must be the first time the node was started
-    node_id = random_string(8)
+    node_id = random_string(9)
     # Save it to file for the next start
     with open(data_folder+'/.id', "w") as id_file:
         id_file.write(node_id)
@@ -74,8 +74,10 @@ subscriber.setsockopt(zmq.SUBSCRIBE, b'')
 # Socket to receive Repair request messages from the controller
 repair_subscriber = context.socket(zmq.SUB)
 repair_subscriber.connect(repair_subscriber_address)
-# Receive every message (empty subscription)
-repair_subscriber.setsockopt(zmq.SUBSCRIBE, b'')
+# Receive messages destined for all nodes
+repair_subscriber.setsockopt(zmq.SUBSCRIBE, b'all_nodes')
+# Receive messages destined for this node
+repair_subscriber.setsockopt(zmq.SUBSCRIBE, node_id.encode('UTF-8'))
 # Socket to send repair results to the controller
 repair_sender = context.socket(zmq.PUSH)
 repair_sender.connect(repair_sender_address)
@@ -146,10 +148,11 @@ while True:
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket where we get repair requests
         msg = repair_subscriber.recv()
+        topic = str(msg[:9])
 
         # Parse the Protobuf message from the first frame
         task = messages_pb2.fragment_status_request()
-        task.ParseFromString(msg)
+        task.ParseFromString(msg[9:])
 
         fragment_name = task.fragment_name
         # Check whether the fragment is on the disk
