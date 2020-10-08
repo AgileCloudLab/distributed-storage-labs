@@ -276,15 +276,18 @@ def rs_repair():
 
     #Retrieve the list of files stored using Reed-Solomon from the database
     db = get_db()
-    cursor = db.execute("SELECT `storage_details` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")
+    cursor = db.execute("SELECT `storage_details`, `size` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")
     if not cursor: 
         return make_response({"message": "Error connecting to the database"}, 500)
     
     rs_files = cursor.fetchall()
     rs_files = [dict(file) for file in rs_files]
     
-    fragments_missing, fragments_repaired = reedsolomon.start_repair_process(rs_files, repair_socket,
-                                                                             repair_response_socket)
+    fragments_missing, fragments_repaired = reedsolomon.start_repair_process(rs_files,
+                                                                             repair_socket,
+                                                                             repair_response_socket,
+                                                                             data_req_socket, 
+                                                                             response_socket)
     
     return make_response({"fragments_missing": fragments_missing,
                           "fragments_repaired": fragments_repaired})

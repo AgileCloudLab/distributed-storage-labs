@@ -148,9 +148,10 @@ while True:
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket where we get repair requests
         msg = repair_subscriber.recv()
+        # Retrieve the topic that was sent as a prefix
         topic = str(msg[:9])
 
-        # Parse the Protobuf message from the first frame
+        # Parse the Protobuf message from the first frame, taking care to omit the topic
         task = messages_pb2.fragment_status_request()
         task.ParseFromString(msg[9:])
 

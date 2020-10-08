@@ -133,7 +133,7 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
 #
 
 
-def start_repair_process(files, repair_socket, repair_response_socket):
+def start_repair_process(files, repair_socket, repair_response_socket, data_req_socket, response_socket):
     number_of_missing_fragments = 0
     number_of_repaired_fragments = 0
 
@@ -175,7 +175,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 print("Fragment %s OK" % fragment)
 
         # If we have lost fragments, we figure out where they were stored
-        # we assume that each node stored exactly 1 or 0 fragments
+        # we assume that each node has exactly 1 or 0 fragments
         nodes_without_fragment = list(nodes.difference(nodes_with_fragment))
         if len(lost_fragments) > 0:
 
@@ -184,12 +184,46 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 print("Too many lost fragments: %s. Unable to repair. " % len(lost_fragments))
                 continue
 
-            # Retrieve sufficient fragments to decode
-            # TODO
+            # Retrieve sufficient fragments and decode
+            file_data = get_file(existing_fragments,
+                                     storage_details["max_erasures"],
+                                     file["size"],
+                                     data_req_socket,
+                                     response_socket)
 
-            # Re-encode each missing fragment: foreach loop
+            #Build the encoder - TODO: separate function
+            # How many coded fragments (=symbols) will be required to reconstruct the encoded data. 
+            symbols = STORAGE_NODES_NUM - storage_details["max_erasures"]
+            # The size of one coded fragment (total size/number of symbols, rounded up)
+            symbol_size = math.ceil(len(file_data)/symbols)
+            # Kodo RLNC encoder using 2^8 finite field
+            encoder = kodo.RLNCEncoder(kodo.field.binary8, symbols, symbol_size)
+            encoder.set_symbols_storage(file_data)
+
+            # Re-encode each missing fragment: 
             for lost_fragment in lost_fragments:
-                number_of_repaired_fragments += 1
-                # TODO
+                fragment_index = coded_fragments.index(lost_fragment)
+                # Select the appropriate Reed Solomon coefficient vector
+                coefficients = RS_CAUCHY_COEFFS[fragment_index]
+                # Generate a coded fragment with these coefficients
+                # (trim the coeffs to the actual length we need)
+                symbol = encoder.produce_symbol(coefficients[:symbols])
+                # Save with the same name as before
+                fragment_names.append(lost_fragment)
 
+                # Send a Protobuf STORE DATA request to the Storage Nodes
+                task = messages_pb2.storedata_request()
+                task.filename = name
+'''
+                repair_socket.send_multipart([
+                    task.SerializeToString(),
+                    bytearray(symbol)
+                ])
+
+            # Wait until we receive a response for every fragment
+            for task_nbr in range(len(lost_fragments)):
+                resp = response_socket.recv_string()
+                print('Received: %s' % resp)
+                number_of_repaired_fragments += 1
+'''
     return number_of_missing_fragments, number_of_repaired_fragments
