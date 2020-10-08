@@ -17,6 +17,9 @@ import messages_pb2 # Generated Protobuf messages
 import io # For sending binary data in a HTTP response
 import logging
 
+from apscheduler.schedulers.background import BackgroundScheduler # automated repair
+import atexit # unregister scheduler at app exit
+
 import raid1
 import reedsolomon
 
@@ -66,6 +69,7 @@ repair_response_socket.bind("tcp://*:5561")
 # Wait for all workers to start and connect. 
 time.sleep(1)
 print("Listening to ZMQ messages on tcp://*:5558 and tcp://*:5561")
+
 
 # Instantiate the Flask app (must be before the endpoint functions)
 app = Flask(__name__)
@@ -292,6 +296,19 @@ def rs_repair():
     return make_response({"fragments_missing": fragments_missing,
                           "fragments_repaired": fragments_repaired})
 #
+
+def rs_automated_repair():
+    print("Running automated Reed-Solomon repair process")
+    with app.app_context():
+        rs_repair()
+
+#Create a scheduler and post a repair job every 60 seconds
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=60)
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
 
 
 @app.errorhandler(500)
