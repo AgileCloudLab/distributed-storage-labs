@@ -72,7 +72,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
 #
 
 def get_file(coded_fragments, max_erasures, file_size,
-             data_req_socket, response_socket, used_during_repair=False):
+             data_req_socket, response_socket):
     """
     Implements retrieving a file that is stored with Reed Solomon erasure coding
 
@@ -106,7 +106,7 @@ def get_file(coded_fragments, max_erasures, file_size,
                                             header.SerializeToString(),
                                             task.SerializeToString()])
 
-    # Receive both chunks and insert them to 
+    # Receive all chunks and insert them into the symbols array
     symbols = []
     for _ in range(len(fragnames)):
         result = response_socket.recv_multipart()
@@ -126,7 +126,7 @@ def get_file(coded_fragments, max_erasures, file_size,
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
-        # Figure out the which coefficient vector produced this fragment
+        # Figure out which coefficient vector produced this fragment
         # by checking the fragment name index 
         coeff_idx = coded_fragments.index(symbol['chunkname'])
         coefficients = RS_CAUCHY_COEFFS[coeff_idx]
@@ -135,6 +135,73 @@ def get_file(coded_fragments, max_erasures, file_size,
         decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
 
     
+    # Make sure the decoder successfully reconstructed the file
+    assert(decoder.is_complete())
+
+    return data_out[:file_size]
+#
+
+
+def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
+                        repair_socket, repair_response_socket):
+    """
+    Implements retrieving a file that is stored with Reed Solomon erasure coding
+
+    :param coded_fragments: Names of the coded fragments
+    :param max_erasures: Max erasures setting that was used when storing the file
+    :param file_size: The original data size. 
+    :param data_req_socket: A ZMQ SUB socket to request chunks from the storage nodes
+    :param response_socket: A ZMQ PULL socket where the storage nodes respond.
+    :param used_during repair: if set to true, sends a multipart message
+    :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
+    """
+    
+    # Request the coded fragments in parallel
+    for name in fragments_to_retrieve:
+        task = messages_pb2.getdata_request()
+        task.filename = name
+        header = messages_pb2.header()
+        header.request_type = messages_pb2.FRAGMENT_DATA_REQ
+        repair_socket.send_multipart([b"all_nodes",
+                                      header.SerializeToString(),
+                                      task.SerializeToString()])
+
+    # Receive all chunks and insert them into the symbols array
+    symbols = []
+    for _ in range(len(fragments_to_retrieve)):
+        result = repair_response_socket.recv_multipart()
+        # In this case we don't care about the received name, just use the 
+        # data from the second frame
+        symbols.append({
+            "chunkname": result[0].decode('utf-8'), 
+            "data": bytearray(result[1])
+        })
+    print(str(len(fragments_to_retrieve)) + " coded fragments received successfully")
+
+    # Reconstruct the original data with a decoder
+    symbols_num = len(symbols)
+    print("Symbols: " + str(symbols_num))
+    symbol_size = len(symbols[0]['data'])
+    print("Symbol size: " + str(symbol_size))
+    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
+    print("Decoder block size: " + str(decoder.block_size()))
+    print("File size: " + str(file_size))
+    data_out = bytearray(decoder.block_size())
+    decoder.set_symbols_storage(data_out)
+
+    for symbol in symbols:
+        # Figure out which coefficient vector produced this fragment
+        # by checking the fragment name index 
+        coeff_idx = coded_fragments.index(symbol['chunkname'])
+        print("Fragment name: " + symbol["chunkname"])
+        print("Coefficients: " + str(coeff_idx))
+        coefficients = RS_CAUCHY_COEFFS[coeff_idx]
+        print(coefficients)
+        # Use the same coefficients for decoding (trim the coefficients to 
+        # symbols_num to avoid nasty bugs)
+        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
+
+    print("Decoding done")
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())
 
@@ -188,9 +255,12 @@ def start_repair_process(files, repair_socket, repair_response_socket):
             else:
                 print("Fragment %s OK" % fragment)
 
-        # If we have lost fragments, we figure out where they were stored
-        # we assume that each node has exactly 1 or 0 fragments
+        # If we have lost fragments, we must figure out where they were stored
+        # We assume that each node has exactly 1 or 0 fragments
         nodes_without_fragment = list(nodes.difference(nodes_with_fragment))
+
+
+        # Perform the actual repair, if necessary
         if len(lost_fragments) > 0:
 
             # Check that enough fragments still remain to be able to repair
@@ -199,12 +269,12 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 continue
 
             # Retrieve sufficient fragments and decode
-            file_data = get_file(existing_fragments,
-                                 storage_details["max_erasures"],
-                                 file["size"],
-                                 repair_socket,
-                                 repair_response_socket,
-                                 True
+            symbols = STORAGE_NODES_NUM - storage_details["max_erasures"]
+            file_data = get_file_for_repair(coded_fragments,
+                                            existing_fragments[:symbols], # only as many as necessary
+                                            file["size"],
+                                            repair_socket,
+                                            repair_response_socket
             )
 
             #Build the encoder - TODO: separate function

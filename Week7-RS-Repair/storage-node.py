@@ -148,7 +148,6 @@ while True:
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket where we get repair requests
         # Parse the multi-part message
-        print("Something arrived")
         msg = repair_subscriber.recv_multipart()
 
         # Retrieve the topic that was sent as a prefix

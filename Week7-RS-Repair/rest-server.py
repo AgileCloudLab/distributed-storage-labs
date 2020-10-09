@@ -302,7 +302,7 @@ def rs_automated_repair():
 
 #Create a scheduler and post a repair job every 60 seconds
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=60)
+scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=3)
 scheduler.start()
 
 # Shut down the scheduler when exiting the app
