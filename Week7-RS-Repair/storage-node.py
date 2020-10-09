@@ -146,20 +146,22 @@ while True:
             pass
 
     if repair_subscriber in socks:
-        # Incoming message on the 'repair_subscriber' socket where we get repair requests
+        # Incoming message on the 'repair_subscriber' socket
+
         # Parse the multi-part message
         msg = repair_subscriber.recv_multipart()
 
-        # Retrieve the topic that was sent as a prefix
-        topic = str(msg[0])
+        # The topic is sent a frame 0
+        #topic = str(msg[0])
         
-        # Parse the header from the first frame, taking care to omit the topic
+        # Parse the header from frame 1. This is used to distinguish between
+        # different types of requests
         header = messages_pb2.header()
         header.ParseFromString(msg[1])
 
-        #Parse the actual message based on the header
-        #Fragment Status requests
+        # Parse the actual message based on the header
         if header.request_type == messages_pb2.FRAGMENT_STATUS_REQ:
+            # Fragment Status requests
             task = messages_pb2.fragment_status_request()
             task.ParseFromString(msg[2])
 
@@ -181,9 +183,9 @@ while True:
 
             repair_sender.send(response.SerializeToString())
 
-        # Fragment data request - same implementation as serving normal data
-        # requests, except for the different socket the response is sent on
         elif header.request_type == messages_pb2.FRAGMENT_DATA_REQ:
+            # Fragment data request - same implementation as serving normal data
+            # requests, except for the different socket the response is sent on
             task = messages_pb2.getdata_request()
             task.ParseFromString(msg[2])
 
@@ -204,12 +206,13 @@ while True:
                 # This is OK here
                 pass
 
-        #Fragment store request
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
+            #Fragment store request - same implementation as serving normal data
+            # requests, except for the different socket the response is sent on
             task = messages_pb2.storedata_request()
             task.ParseFromString(msg[2])
 
-            # The data is the second frame
+            # The data is the third frame
             data = msg[3]
 
             print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
