@@ -71,6 +71,30 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
     return fragment_names
 #
 
+
+def decode_file(coded_fragments, symbols):
+
+    # Reconstruct the original data with a decoder
+    symbols_num = len(symbols)
+    symbol_size = len(symbols[0]['data'])
+    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
+    data_out = bytearray(decoder.block_size())
+    decoder.set_symbols_storage(data_out)
+
+    for symbol in symbols:
+        # Figure out which coefficient vector produced this fragment
+        # by checking the fragment name index
+        coeff_idx = coded_fragments.index(symbol['chunkname'])
+        coefficients = RS_CAUCHY_COEFFS[coeff_idx]
+        # Use the same coefficients for decoding (trim the coefficients to
+        # symbols_num to avoid nasty bugs)
+        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
+
+    # Make sure the decoder successfully reconstructed the file
+    assert(decoder.is_complete())
+    return data_out
+#
+
 def get_file(coded_fragments, max_erasures, file_size,
              data_req_socket, response_socket):
     """
@@ -81,7 +105,6 @@ def get_file(coded_fragments, max_erasures, file_size,
     :param file_size: The original data size. 
     :param data_req_socket: A ZMQ SUB socket to request chunks from the storage nodes
     :param response_socket: A ZMQ PULL socket where the storage nodes respond.
-    :param used_during repair: if set to true, sends a multipart message
     :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
     """
     
@@ -95,16 +118,9 @@ def get_file(coded_fragments, max_erasures, file_size,
     for name in fragnames:
         task = messages_pb2.getdata_request()
         task.filename = name
-        if not used_during_repair:
-            data_req_socket.send(
-                task.SerializeToString()
+        data_req_socket.send(
+            task.SerializeToString()
             )
-        else: # When used retrieving data for repair, a separate message format is needed
-            header = messages_pb2.header()
-            header.request_type = messages_pb2.FRAGMENT_DATA_REQ
-            data_req_socket.send_multipart([b"all_nodes",
-                                            header.SerializeToString(),
-                                            task.SerializeToString()])
 
     # Receive all chunks and insert them into the symbols array
     symbols = []
@@ -118,27 +134,10 @@ def get_file(coded_fragments, max_erasures, file_size,
         })
     print("All coded fragments received successfully")
 
-    # Reconstruct the original data with a decoder
-    symbols_num = len(symbols)
-    symbol_size = len(symbols[0]['data'])
-    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    data_out = bytearray(decoder.block_size())
-    decoder.set_symbols_storage(data_out)
+    #Reconstruct the original file data
+    file_data = decode_file(coded_fragments, symbols)
 
-    for symbol in symbols:
-        # Figure out which coefficient vector produced this fragment
-        # by checking the fragment name index 
-        coeff_idx = coded_fragments.index(symbol['chunkname'])
-        coefficients = RS_CAUCHY_COEFFS[coeff_idx]
-        # Use the same coefficients for decoding (trim the coefficients to 
-        # symbols_num to avoid nasty bugs)
-        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
-
-    
-    # Make sure the decoder successfully reconstructed the file
-    assert(decoder.is_complete())
-
-    return data_out[:file_size]
+    return file_data[:file_size]
 #
 
 
@@ -156,7 +155,7 @@ def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
     :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
     """
     
-    # Request the coded fragments in parallel
+    # Request the coded fragments in parallel.
     for name in fragments_to_retrieve:
         task = messages_pb2.getdata_request()
         task.filename = name
@@ -178,26 +177,10 @@ def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
         })
     print(str(len(fragments_to_retrieve)) + " coded fragments received successfully")
 
-    # Reconstruct the original data with a decoder
-    symbols_num = len(symbols)
-    symbol_size = len(symbols[0]['data'])
-    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    data_out = bytearray(decoder.block_size())
-    decoder.set_symbols_storage(data_out)
+    #Reconstruct the original file data
+    file_data = decode_file(coded_fragments, symbols)
 
-    for symbol in symbols:
-        # Figure out which coefficient vector produced this fragment
-        # by checking the fragment name index 
-        coeff_idx = coded_fragments.index(symbol['chunkname'])
-        coefficients = RS_CAUCHY_COEFFS[coeff_idx]
-        # Use the same coefficients for decoding (trim the coefficients to 
-        # symbols_num to avoid nasty bugs)
-        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
-
-    # Make sure the decoder successfully reconstructed the file
-    assert(decoder.is_complete())
-
-    return data_out[:file_size]
+    return file_data[:file_size]# Reconstruct the original data with a decoder
 #
 
 
