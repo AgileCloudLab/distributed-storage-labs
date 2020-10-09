@@ -289,9 +289,7 @@ def rs_repair():
     
     fragments_missing, fragments_repaired = reedsolomon.start_repair_process(rs_files,
                                                                              repair_socket,
-                                                                             repair_response_socket,
-                                                                             data_req_socket, 
-                                                                             response_socket)
+                                                                             repair_response_socket)
     
     return make_response({"fragments_missing": fragments_missing,
                           "fragments_repaired": fragments_repaired})

@@ -205,7 +205,7 @@ while True:
                 # This is OK here
                 pass
 
-        #Fragment sore request
+        #Fragment store request
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
             task = messages_pb2.storedata_request()
             task.ParseFromString(msg[2])
@@ -221,7 +221,7 @@ while True:
             print("Chunk saved to %s" % chunk_local_path)
 
             # Send response (just the file name)
-            sender.send_string(task.filename)
+            repair_sender.send_string(task.filename)
 
         else:
             print("Message type not supported")

@@ -71,7 +71,8 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
     return fragment_names
 #
 
-def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response_socket):
+def get_file(coded_fragments, max_erasures, file_size,
+             data_req_socket, response_socket, used_during_repair=False):
     """
     Implements retrieving a file that is stored with Reed Solomon erasure coding
 
@@ -80,6 +81,7 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
     :param file_size: The original data size. 
     :param data_req_socket: A ZMQ SUB socket to request chunks from the storage nodes
     :param response_socket: A ZMQ PULL socket where the storage nodes respond.
+    :param used_during repair: if set to true, sends a multipart message
     :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
     """
     
@@ -93,9 +95,16 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
     for name in fragnames:
         task = messages_pb2.getdata_request()
         task.filename = name
-        data_req_socket.send(
-            task.SerializeToString()
-        )
+        if not used_during_repair:
+            data_req_socket.send(
+                task.SerializeToString()
+            )
+        else: # When used retrieving data for repair, a separate message format is needed
+            header = messages_pb2.header()
+            header.request_type = messages_pb2.FRAGMENT_DATA_REQ
+            data_req_socket.send_multipart([b"all_nodes",
+                                            header.SerializeToString(),
+                                            task.SerializeToString()])
 
     # Receive both chunks and insert them to 
     symbols = []
@@ -133,7 +142,7 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
 #
 
 
-def start_repair_process(files, repair_socket, repair_response_socket, data_req_socket, response_socket):
+def start_repair_process(files, repair_socket, repair_response_socket):
     number_of_missing_fragments = 0
     number_of_repaired_fragments = 0
 
@@ -191,10 +200,12 @@ def start_repair_process(files, repair_socket, repair_response_socket, data_req_
 
             # Retrieve sufficient fragments and decode
             file_data = get_file(existing_fragments,
-                                     storage_details["max_erasures"],
-                                     file["size"],
-                                     data_req_socket,
-                                     response_socket)
+                                 storage_details["max_erasures"],
+                                 file["size"],
+                                 repair_socket,
+                                 repair_response_socket,
+                                 True
+            )
 
             #Build the encoder - TODO: separate function
             # How many coded fragments (=symbols) will be required to reconstruct the encoded data. 
@@ -234,8 +245,8 @@ def start_repair_process(files, repair_socket, repair_response_socket, data_req_
 
             # Wait until we receive a response for every fragment
             for task_nbr in range(len(lost_fragments)):
-                resp = response_socket.recv_string()
-                print('Received: %s' % resp)
+                resp = repair_response_socket.recv_string()
+                print('Repaired fragment: %s' % resp)
 
 
     return number_of_missing_fragments, number_of_repaired_fragments
