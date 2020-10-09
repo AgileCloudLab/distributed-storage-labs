@@ -180,12 +180,8 @@ def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
 
     # Reconstruct the original data with a decoder
     symbols_num = len(symbols)
-    print("Symbols: " + str(symbols_num))
     symbol_size = len(symbols[0]['data'])
-    print("Symbol size: " + str(symbol_size))
     decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    print("Decoder block size: " + str(decoder.block_size()))
-    print("File size: " + str(file_size))
     data_out = bytearray(decoder.block_size())
     decoder.set_symbols_storage(data_out)
 
@@ -193,15 +189,11 @@ def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
         # Figure out which coefficient vector produced this fragment
         # by checking the fragment name index 
         coeff_idx = coded_fragments.index(symbol['chunkname'])
-        print("Fragment name: " + symbol["chunkname"])
-        print("Coefficients: " + str(coeff_idx))
         coefficients = RS_CAUCHY_COEFFS[coeff_idx]
-        print(coefficients)
         # Use the same coefficients for decoding (trim the coefficients to 
         # symbols_num to avoid nasty bugs)
         decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
 
-    print("Decoding done")
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())
 
