@@ -60,7 +60,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
 
         send_task_socket.send_multipart([
             task.SerializeToString(),
-            bytearray(coefficients[:symbols]) + bytearray(symbol)
+            coefficients[:symbols] + bytearray(symbol)
         ])
     
     # Wait until we receive a response for every fragment
@@ -211,6 +211,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
     #Check that each file is actually stored on the storage nodes
     for file in files:
+        print("Checking file with id: %s" % file["id"])
         #We parse the JSON into a python dictionary
         storage_details = json.loads(file["storage_details"])
 
@@ -265,8 +266,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
             # Retrieve sufficient fragments and decode
             symbols = STORAGE_NODES_NUM - storage_details["max_erasures"]
-            file_data = get_file_for_repair(coded_fragments,
-                                            existing_fragments[:symbols], # only as many as necessary
+            file_data = get_file_for_repair(existing_fragments[:symbols], # only as many as necessary
                                             file["size"],
                                             repair_socket,
                                             repair_response_socket
@@ -304,7 +304,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 repair_socket.send_multipart([node_id.encode('UTF-8'),
                                               header.SerializeToString(),
                                               task.SerializeToString(),
-                                              bytearray(coefficients[:symbols]) + bytearray(symbol)
+                                              coefficients[:symbols] + bytearray(symbol)
                 ])
                 number_of_repaired_fragments += 1
 

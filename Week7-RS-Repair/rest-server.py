@@ -280,7 +280,7 @@ def rs_repair():
 
     #Retrieve the list of files stored using Reed-Solomon from the database
     db = get_db()
-    cursor = db.execute("SELECT `storage_details`, `size` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")
+    cursor = db.execute("SELECT `id`, `storage_details`, `size` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")
     if not cursor: 
         return make_response({"message": "Error connecting to the database"}, 500)
     
