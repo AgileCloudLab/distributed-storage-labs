@@ -97,6 +97,8 @@ def decode_file(symbols):
 
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())
+    print("File decoded successfully")
+
     return data_out
 #
 
@@ -217,10 +219,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
         #Iterate over each coded fragment to check that it is not missing
         nodes = set() # list of all storage nodes
-        nodes_with_fragment = set() # list of storage nodes with fragment
-        coded_fragments = storage_details["coded_fragments"]
-        lost_fragments = []
-        existing_fragments = []
+        nodes_with_fragment = set() # list of storage nodes with fragments
+        coded_fragments = storage_details["coded_fragments"] # list of all coded fragments
+        missing_fragments = [] # list of missing coded fragments
+        existing_fragments = [] # list of existing coded fragments
         for fragment in coded_fragments:
             task = messages_pb2.fragment_status_request()
             task.fragment_name = fragment
@@ -237,9 +239,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 msg = repair_response_socket.recv()
                 response = messages_pb2.fragment_status_response()
                 response.ParseFromString(msg)
-
-                #Build a set of nodes
-                nodes.add(response.node_id)
+                
+                nodes.add(response.node_id) #Build a set of nodes
                 if response.is_present == True:
                     nodes_with_fragment.add(response.node_id)
                     existing_fragments.append(fragment)
@@ -247,7 +248,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
             if fragment_found == False:
                 print("Fragment %s lost" % fragment)
-                lost_fragments.append(fragment)
+                missing_fragments.append(fragment)
                 number_of_missing_fragments += 1
             else:
                 print("Fragment %s OK" % fragment)
@@ -258,10 +259,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
 
         # Perform the actual repair, if necessary
-        if len(lost_fragments) > 0:
+        if len(missing_fragments) > 0:
             # Check that enough fragments still remain to be able to repair
-            if len(lost_fragments) > storage_details["max_erasures"]:
-                print("Too many lost fragments: %s. Unable to repair file. " % len(lost_fragments))
+            if len(missing_fragments) > storage_details["max_erasures"]:
+                print("Too many lost fragments: %s. Unable to repair file. " % len(missing_fragments))
                 continue
 
             # Retrieve sufficient fragments and decode
@@ -282,8 +283,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
             encoder.set_symbols_storage(file_data)
 
             # Re-encode each missing fragment: 
-            for lost_fragment in lost_fragments:
-                fragment_index = coded_fragments.index(lost_fragment)
+            for missing_fragment in missing_fragments:
+                fragment_index = coded_fragments.index(missing_fragment)
                 # Select the appropriate Reed Solomon coefficient vector
                 coefficients = RS_CAUCHY_COEFFS[fragment_index]
                 # Generate a coded fragment with these coefficients
@@ -293,7 +294,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 # Save with the same name as before
                 # Send a Protobuf STORE DATA request to the Storage Nodes
                 task = messages_pb2.storedata_request()
-                task.filename = lost_fragment
+                task.filename = missing_fragment
 
                 header = messages_pb2.header()
                 header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
@@ -309,7 +310,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 number_of_repaired_fragments += 1
 
             # Wait until we receive a response for every fragment
-            for task_nbr in range(len(lost_fragments)):
+            for task_nbr in range(len(missing_fragments)):
                 resp = repair_response_socket.recv_string()
                 print('Repaired fragment: %s' % resp)
 

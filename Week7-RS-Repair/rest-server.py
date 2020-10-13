@@ -295,14 +295,16 @@ def rs_repair():
                           "fragments_repaired": fragments_repaired})
 #
 
+
 def rs_automated_repair():
     print("Running automated Reed-Solomon repair process")
     with app.app_context():
         rs_repair()
-
+#
+        
 #Create a scheduler and post a repair job every 60 seconds
 scheduler = BackgroundScheduler()
-scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=5)
+scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=60)
 scheduler.start()
 
 # Shut down the scheduler when exiting the app
