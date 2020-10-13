@@ -72,11 +72,18 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
 #
 
 
-def decode_file(coded_fragments, symbols):
+def decode_file(symbols):
+    """
+    Decode a file using Reed Solomon decoder and the provided coded symbols.
+    The number of symbols must be the same as STORAGE_NODES_NUM - max_erasures.
+
+    :param symbols: coded symbols that contain both the coefficients and symbol data
+    :return: the decoded file data
+    """
 
     # Reconstruct the original data with a decoder
     symbols_num = len(symbols)
-    symbol_size = len(symbols[0]['data'])
+    symbol_size = len(symbols[0]['data']) - symbols_num #subtract the coefficients' size
     decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
     data_out = bytearray(decoder.block_size())
     decoder.set_symbols_storage(data_out)
@@ -92,6 +99,7 @@ def decode_file(coded_fragments, symbols):
     assert(decoder.is_complete())
     return data_out
 #
+
 
 def get_file(coded_fragments, max_erasures, file_size,
              data_req_socket, response_socket):
@@ -133,23 +141,23 @@ def get_file(coded_fragments, max_erasures, file_size,
     print("All coded fragments received successfully")
 
     #Reconstruct the original file data
-    file_data = decode_file(coded_fragments, symbols)
+    file_data = decode_file(symbols)
 
     return file_data[:file_size]
 #
 
 
-def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
+def get_file_for_repair(fragments_to_retrieve, file_size,
                         repair_socket, repair_response_socket):
     """
-    Implements retrieving a file that is stored with Reed Solomon erasure coding
+    Implements retrieving a file that is stored with Reed Solomon erasure coding for use
+    in the repair process. Apart from the communication with the storage nodes, the
+    implementation is similar to how a file is retrieved using get_file.
 
-    :param coded_fragments: Names of the coded fragments
-    :param max_erasures: Max erasures setting that was used when storing the file
+    :param fragments_to_retrieve: Names of the coded fragments that should be retrieved
     :param file_size: The original data size. 
     :param data_req_socket: A ZMQ SUB socket to request chunks from the storage nodes
     :param response_socket: A ZMQ PULL socket where the storage nodes respond.
-    :param used_during repair: if set to true, sends a multipart message
     :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
     """
     
@@ -176,13 +184,28 @@ def get_file_for_repair(coded_fragments, fragments_to_retrieve, file_size,
     print(str(len(fragments_to_retrieve)) + " coded fragments received successfully")
 
     #Reconstruct the original file data
-    file_data = decode_file(coded_fragments, symbols)
+    file_data = decode_file(symbols)
 
     return file_data[:file_size]# Reconstruct the original data with a decoder
 #
 
 
 def start_repair_process(files, repair_socket, repair_response_socket):
+    """
+    Implements the repair process for Reed Solomon erasure coding. It receives a list
+    of files that are to be checked. For each file, it sends queries to the Storage
+    nodes to check that all coded fragments are stored safely. If it finds a missing
+    fragment, it determines which Storage node was supposed to store it and repairs it.
+    This happens by first retrieving the original file data, then re-encoding the missing
+    fragment. It also handles multiple missing fragments for a file, as long as their
+    number does not exceed `max_erasures`.
+
+    :param files: List of files to be checked
+    :param repair_socket: A ZMQ PUB socket to send requests to the storage nodes
+    :param repair_response_socket: A ZMQ PULL socket on which the storage nodes respond.
+    :return: the number of missing fragments, the number of repaired fragments
+    """
+
     number_of_missing_fragments = 0
     number_of_repaired_fragments = 0
 
@@ -235,10 +258,9 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
         # Perform the actual repair, if necessary
         if len(lost_fragments) > 0:
-
             # Check that enough fragments still remain to be able to repair
             if len(lost_fragments) > storage_details["max_erasures"]:
-                print("Too many lost fragments: %s. Unable to repair. " % len(lost_fragments))
+                print("Too many lost fragments: %s. Unable to repair file. " % len(lost_fragments))
                 continue
 
             # Retrieve sufficient fragments and decode
@@ -250,7 +272,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                                             repair_response_socket
             )
 
-            #Build the encoder - TODO: separate function
+            #Build the encoder
             # How many coded fragments (=symbols) will be required to reconstruct the encoded data. 
             symbols = STORAGE_NODES_NUM - storage_details["max_erasures"]
             # The size of one coded fragment (total size/number of symbols, rounded up)
@@ -282,7 +304,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 repair_socket.send_multipart([node_id.encode('UTF-8'),
                                               header.SerializeToString(),
                                               task.SerializeToString(),
-                                              bytearray(symbol)
+                                              bytearray(coefficients[:symbols]) + bytearray(symbol)
                 ])
                 number_of_repaired_fragments += 1
 
