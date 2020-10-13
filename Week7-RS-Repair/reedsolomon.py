@@ -60,7 +60,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
 
         send_task_socket.send_multipart([
             task.SerializeToString(),
-            bytearray(symbol)
+            bytearray(coefficients[:symbols]) + bytearray(symbol)
         ])
     
     # Wait until we receive a response for every fragment
@@ -82,13 +82,11 @@ def decode_file(coded_fragments, symbols):
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
-        # Figure out which coefficient vector produced this fragment
-        # by checking the fragment name index
-        coeff_idx = coded_fragments.index(symbol['chunkname'])
-        coefficients = RS_CAUCHY_COEFFS[coeff_idx]
-        # Use the same coefficients for decoding (trim the coefficients to
-        # symbols_num to avoid nasty bugs)
-        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
+        # Separate the coefficients from the symbol data
+        coefficients = symbol['data'][:symbols_num]
+        symbol_data = symbol['data'][symbols_num:]
+        # Feed it to the decoder
+        decoder.consume_symbol(symbol_data, coefficients)
 
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())
