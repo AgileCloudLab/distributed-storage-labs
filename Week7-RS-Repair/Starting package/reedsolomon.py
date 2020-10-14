@@ -1,3 +1,8 @@
+"""
+Aarhus University - Distributed Storage course - Lab 7
+
+Reed-Solomon coder
+"""
 import kodo
 import math
 import random
@@ -148,48 +153,8 @@ def get_file(coded_fragments, max_erasures, file_size,
     return file_data[:file_size]
 #
 
-
-def get_file_for_repair(fragments_to_retrieve, file_size,
-                        repair_socket, repair_response_socket):
-    """
-    Implements retrieving a file that is stored with Reed Solomon erasure coding for use
-    in the repair process. Apart from the communication with the storage nodes, the
-    implementation is similar to how a file is retrieved using get_file.
-
-    :param fragments_to_retrieve: Names of the coded fragments that should be retrieved
-    :param file_size: The original data size. 
-    :param data_req_socket: A ZMQ SUB socket to request chunks from the storage nodes
-    :param response_socket: A ZMQ PULL socket where the storage nodes respond.
-    :return: A list of the random generated chunk names, e.g. (c1,c2), (c3,c4)
-    """
-    
-    # Request the coded fragments in parallel.
-    for name in fragments_to_retrieve:
-        task = messages_pb2.getdata_request()
-        task.filename = name
-        header = messages_pb2.header()
-        header.request_type = messages_pb2.FRAGMENT_DATA_REQ
-        repair_socket.send_multipart([b"all_nodes",
-                                      header.SerializeToString(),
-                                      task.SerializeToString()])
-
-    # Receive all chunks and insert them into the symbols array
-    symbols = []
-    for _ in range(len(fragments_to_retrieve)):
-        result = repair_response_socket.recv_multipart()
-        # In this case we don't care about the received name, just use the 
-        # data from the second frame
-        symbols.append({
-            "chunkname": result[0].decode('utf-8'), 
-            "data": bytearray(result[1])
-        })
-    print(str(len(fragments_to_retrieve)) + " coded fragments received successfully")
-
-    #Reconstruct the original file data
-    file_data = decode_file(symbols)
-
-    return file_data[:file_size]# Reconstruct the original data with a decoder
-#
+# get_file_for_repair goes here
+# TO BE DONE
 
 
 # Repair process implementation goes here

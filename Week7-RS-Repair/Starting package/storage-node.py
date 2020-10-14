@@ -1,5 +1,5 @@
 """
-Aarhus University - Distributed Storage course - Lab 4
+Aarhus University - Distributed Storage course - Lab 7
 
 Storage Node
 """

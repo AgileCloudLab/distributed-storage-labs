@@ -1,5 +1,5 @@
 """
-Aarhus University - Distributed Storage course - Lab 6
+Aarhus University - Distributed Storage course - Lab 7
 
 REST API + RAID Controller
 """
@@ -16,9 +16,6 @@ import math # For cutting the file in half
 import messages_pb2 # Generated Protobuf messages
 import io # For sending binary data in a HTTP response
 import logging
-
-from apscheduler.schedulers.background import BackgroundScheduler # automated repair
-import atexit # unregister scheduler at app exit
 
 import raid1
 import reedsolomon
