@@ -1,7 +1,7 @@
 """
 Aarhus University - Distributed Storage course - Lab 6
 
-REST API
+REST API + RAID Controller
 """
 from flask import Flask, make_response, g, request, send_file
 import sqlite3
@@ -18,6 +18,7 @@ import io # For sending binary data in a HTTP response
 import logging
 
 import raid1
+import reedsolomon
 
 from utils import is_raspberry_pi
 
@@ -99,15 +100,34 @@ def download_file(file_id):
     f = dict(f)
     print("File requested: {}".format(f['filename']))
     
-    part1_filenames = f['part1_filenames'].split(',')
-    part2_filenames = f['part2_filenames'].split(',')
+    # Parse the storage details JSON string
+    import json
+    storage_details = json.loads(f['storage_details'])
 
-    file_data = raid1.get_file(
-        part1_filenames, 
-        part2_filenames, 
-        data_req_socket, 
-        response_socket
-    )
+    if f['storage_mode'] == 'raid1':
+        
+        part1_filenames = storage_details['part1_filenames']
+        part2_filenames = storage_details['part2_filenames']
+
+        file_data = raid1.get_file(
+            part1_filenames, 
+            part2_filenames, 
+            data_req_socket, 
+            response_socket
+        )
+
+    elif f['storage_mode'] == 'erasure_coding_rs':
+        
+        coded_fragments = storage_details['coded_fragments']
+        max_erasures = storage_details['max_erasures']
+
+        file_data = reedsolomon.get_file(
+            coded_fragments,
+            max_erasures,
+            f['size'],
+            data_req_socket, 
+            response_socket
+        )
 
     return send_file(io.BytesIO(file_data), mimetype=f['content_type'])
 #
@@ -174,7 +194,7 @@ def add_files_multipart():
     filename = file.filename
     content_type = file.mimetype
     # Load the file contents into a bytearray and measure its size
-    data = file.read()
+    data = bytearray(file.read())
     size = len(data)
     print("File received: %s, size: %d bytes, type: %s" % (filename, size, content_type))
     
@@ -197,7 +217,13 @@ def add_files_multipart():
         max_erasures = int(payload.get('max_erasures', 1))
         print("Max erasures: %d" % (max_erasures))
         
-        pass
+        # Store the file contents with Reed Solomon erasure coding
+        fragment_names = reedsolomon.store_file(data, max_erasures, send_task_socket, response_socket)
+
+        storage_details = {
+            "coded_fragments": fragment_names,
+            "max_erasures": max_erasures
+        }
     
     else:
         logging.error("Unexpected storage mode: %s" % storage_mode)

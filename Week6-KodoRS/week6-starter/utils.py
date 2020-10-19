@@ -1,8 +1,3 @@
-"""
-Aarhus University - Distributed Storage course - Lab 6
-
-Utilities used by the other components
-"""
 import random
 import string
 import os

@@ -1,9 +1,3 @@
-
-"""
-Aarhus University - Distributed Storage course - Lab 6
-
-RAID 1 implementation
-"""
 import messages_pb2
 import math
 import random
