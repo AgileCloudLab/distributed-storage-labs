@@ -13,6 +13,7 @@ import string
 
 from utils import random_string, write_file, is_raspberry_pi
 
+MAX_CHUNKS_PER_FILE = 10
 
 # Read the folder name where chunks should be stored from the first program argument
 # (or use the current folder if none was given)
@@ -106,15 +107,17 @@ while True:
         task = messages_pb2.storedata_request()
         task.ParseFromString(msg[0])
 
-        # The data is the second frame
-        data = msg[1]
+        # The data starts with the second frame, iterate and store all frames
+        for i in range(1, len(msg)):
+            data = msg[i]
 
-        print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
+            print('Chunk to save: %s, size: %d bytes' %
+                  (task.filename + "." + str(i), len(data)))
 
-        # Store the chunk with the given filename
-        chunk_local_path = data_folder+'/'+task.filename
-        write_file(data, chunk_local_path)
-        print("Chunk saved to %s" % chunk_local_path)
+            # Store the chunk with the given filename
+            chunk_local_path = data_folder+'/'+task.filename+"."+str(i)
+            write_file(data, chunk_local_path)
+            print("Chunk saved to %s" % chunk_local_path)
 
         # Send response (just the file name)
         sender.send_string(task.filename)
@@ -131,19 +134,24 @@ while True:
         filename = task.filename
         print("Data chunk request: %s" % filename)
 
-        # Try to load the requested file from the local file system,
-        # send response only if found
-        try:
-            with open(data_folder+'/'+filename, "rb") as in_file:
-                print("Found chunk %s, sending it back" % filename)
+        #Try to load all fragments with this name
+        #First frame is the filename
+        frames = [bytes(filename, 'utf-8')]
+        #Subsequent frames will contain the file data
+        for i in range(1, MAX_CHUNKS_PER_FILE):
+            try:
+                with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
+                    print("Found chunk %s, sending it back" % filename)
+                    # Add chunk as a new frame
+                    frames.append(in_file.read())
 
-                sender.send_multipart([
-                    bytes(filename, 'utf-8'),
-                    in_file.read()
-                ])
-        except FileNotFoundError:
-            # This is OK here
-            pass
+            except FileNotFoundError:
+                # This is OK here
+                break
+
+        #Only send a result if at least one chunk was found
+        if(len(frames)>1):
+            sender.send_multipart(frames)
 
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket
