@@ -106,6 +106,48 @@ def decode_file(symbols):
     return data_out
 #
 
+def recode(symbols, symbol_count, output_symbol_count):
+    """
+    Recode a file using RLNC decoder and the provided coded symbols.
+    The symbols are fed into the decoder where output_symbol_count symbols are created
+    by generating new linear combinations.
+    Examples of different techiques to recode using Kodo can be found here:
+    https://github.com/steinwurf/kodo-python/blob/master/examples/pure_recode_symbol_api.py
+    https://github.com/steinwurf/kodo-python/blob/master/examples/pure_recode_payload_api.py
+    https://github.com/steinwurf/kodo-python/blob/master/examples/encode_recode_decode_simple.py
+
+    :param symbols: coded symbols that contain both the coefficients and symbol data
+    :param symbol_count: number of symbols needed to decode the file
+    :param output_symbol_count: number of symbols to create
+    :return: the recoded symbols
+    """
+
+    symbol_size = len(symbols[0]['data']) - symbol_count #subtract the coefficients' size
+    recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, len(symbols))
+   # symbol_storage = bytearray(decoder.block_size())
+   # decoder.set_symbols_storage(symbol_storage)
+
+    # Feed the provided symbols to the decoder
+    for symbol in symbols:
+        # Separate the coefficients from the symbol data
+        coefficients = symbol['data'][:symbol_count]
+        symbol_data = symbol['data'][symbol_count:]
+        # Feed it to the decoder
+        recoder.consume_symbol(symbol_data, coefficients)
+
+    # Use recoding to generate new symbols
+    output_symbols = []
+    for i in range(output_symbol_count):
+        recoding_coefficients = recoder.recoder_generate()
+        #Note that recoding and recoded_symbol coefficients differ
+        recoded_symbol, recoded_symbol_coefficients = \
+            recoder.recoder_produce_symbol(recoding_coefficients)
+        #Add the coefficients in front of the symbol data
+        output_symbols.append(recoded_symbol_coefficients + recoded_symbol)
+
+    return output_symbols
+#
+
 
 def get_file(coded_fragments, max_erasures, file_size,
              data_req_socket, response_socket):
