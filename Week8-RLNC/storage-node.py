@@ -11,6 +11,8 @@ import os
 import random
 import string
 
+import rlnc
+
 from utils import random_string, write_file, is_raspberry_pi
 
 MAX_CHUNKS_PER_FILE = 10
@@ -217,6 +219,33 @@ while True:
             except FileNotFoundError:
                 # This is OK here
                 pass
+
+        elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
+            # Recode fragment data request
+            task = messages_pb2.recode_fragments_request()
+            task.ParseFromString(msg[2])
+            fragment_name = task.fragment_name
+            symbol_count = task.symbol_count
+            output_fragment_count = task.output_fragment_count
+            print("Recoded fragment request: %s" % fragment_name)
+
+            # Try to load the requested files from the local file system
+            fragment_count = 0
+            fragments = []
+            for i in range(1, MAX_CHUNKS_PER_FILE):
+                try:
+                    with open(data_folder+'/'+fragment_name+"."+str(i), "rb") as in_file:
+                        fragments.append(bytearray(in_file.read()))
+                    fragment_count += 1
+                except FileNotFoundError:
+                    # This is OK here
+                    pass
+
+            #If at least one fragment is found, recode and send the result
+            if fragment_count > 0:
+                recoded_symbols = rlnc.recode(fragments, symbol_count, output_fragment_count)
+                print("Fragment found, sending requested recoded symbols")
+                repair_sender.send_multipart(recoded_symbols)
 
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
             #Fragment store request - same implementation as serving normal data

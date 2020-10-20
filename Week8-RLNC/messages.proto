@@ -28,6 +28,7 @@ enum request_type
     FRAGMENT_STATUS_REQ = 0;
     FRAGMENT_DATA_REQ = 1;
     STORE_FRAGMENT_DATA_REQ = 2;
+    RECODE_FRAGMENTS_REQ = 3;
 }
 
 // This message is sent in the first frame of the request,
@@ -36,3 +37,11 @@ message header
 {
     request_type request_type = 1;
 }
+
+message recode_fragments_request
+{
+    string fragment_name = 1;
+    int32 symbol_count = 2;
+    int32 output_fragment_count = 3;
+}
+

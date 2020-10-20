@@ -122,7 +122,7 @@ def recode(symbols, symbol_count, output_symbol_count):
     :return: the recoded symbols
     """
 
-    symbol_size = len(symbols[0]['data']) - symbol_count #subtract the coefficients' size
+    symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
     recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, len(symbols))
    # symbol_storage = bytearray(decoder.block_size())
    # decoder.set_symbols_storage(symbol_storage)
@@ -130,8 +130,8 @@ def recode(symbols, symbol_count, output_symbol_count):
     # Feed the provided symbols to the decoder
     for symbol in symbols:
         # Separate the coefficients from the symbol data
-        coefficients = symbol['data'][:symbol_count]
-        symbol_data = symbol['data'][symbol_count:]
+        coefficients = symbol[:symbol_count]
+        symbol_data = symbol[symbol_count:]
         # Feed it to the decoder
         recoder.consume_symbol(symbol_data, coefficients)
 
@@ -219,6 +219,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         storage_details = json.loads(file["storage_details"])
         max_erasures = storage_details["max_erasures"]
         fragments_per_node = storage_details["fragments_per_node"]
+        symbol_count = (STORAGE_NODES_NUM - max_erasures) * fragments_per_node
 
         #Iterate over each node's coded fragments to check that none are missing
         nodes = set() # list of all storage nodes
@@ -252,7 +253,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                     # Check that all fragments with this name are present
                     if response.count < fragments_per_node:
                         fragments_lost = fragments_per_node - response.count
-                        print("Partial (%s of %s) RLNC fragment loss for %s"
+                        print("Partial (%s of %s) RLNC fragments lost for %s"
                               % (fragments_lost, fragments_per_node, fragment))
                         number_of_missing_fragments += fragments_lost
                     else:
@@ -263,5 +264,38 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 print("RLNC all fragments of %s lost" % fragment)
                 missing_fragments.append(fragment)
                 number_of_missing_fragments += fragments_per_node
+#TODO:separate counters for each file
+        # Perform the actual repair, if necessary
+        if number_of_missing_fragments > 0:
+            # Check that enough fragments still remain to be able to reconstruct the data
+            if number_of_missing_fragments > max_erasures * fragments_per_node:
+                print("Too many lost fragments: %s. Unable to repair file. " % number_of_missing_fragments)
+                continue
 
+            #Retrieve sufficient fragments and recode
+            for fragment in coded_fragments:
+                task = messages_pb2.recode_fragments_request()
+                task.fragment_name = fragment
+                task.symbol_count = symbol_count
+                task.output_fragment_count = 2
+                #TODO: test what happens if we request more than the storage node cans provide
+                header = messages_pb2.header()
+                header.request_type = messages_pb2.RECODE_FRAGMENTS_REQ
+                
+                repair_socket.send_multipart([b"all_nodes",
+                                              header.SerializeToString(),
+                                              task.SerializeToString()])
+
+            # Wait until we receive a response from each node that has at least one fragment
+            recoded_symbols = []
+            for task_nbr in range(len(nodes_with_fragment)):
+                response = repair_response_socket.recv_multipart()
+                for i in range(len(response)):
+                    recoded_symbols.append(bytearray(response[i]))
+
+            # Recreate sufficient repair symbols by recoding over the retrieved symbols again
+            re_recoded_symbols = recode(recoded_symbols, symbol_count, number_of_missing_fragments)
+            print("Retrieved %s recoded symbols from Storage nodes. Created %s new recoded symbols"
+                  % (len(recoded_symbols), len(re_recoded_symbols)))
+                    
     return number_of_missing_fragments, number_of_repaired_fragments
