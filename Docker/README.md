@@ -52,25 +52,71 @@ Install [Git Bash](https://git-scm.com/download/win)
 When you use Git it is beneficial to use SSH keys for authentication, as you have to type your password a lot less.
 GitHub provides a guide for this: [https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent](https://docs.github.com/en/free-pro-team@latest/github/authenticating-to-github/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent)
 
-
-
 ## Building the Docker image 
 
-You will need the ssh-key we generated earlier.
-Place it in `ssh` folder of this folder. 
+Before we build the docker image we need to setup a few things. 
+In the folder containing the Docker file (`distributed-storage-labs/Docker`), create a folder name `ssh`.
+First copy the ssh key you generate earlier, if you didn't give it a custom name and path, the name will be `id_rsa`. 
+You need to copy both `id_rsa` and `id_rsa.pub`. 
+Next in the `ssh` folder create a file name `config`, the content of this file should be: 
 
-To build the image run:
+```bash
+host github.com
+    Hostname        github.com
+    User            git
+    IdentityFile    ~/.ssh/id_rsa
+```
+
+If you have chosen a different name for your SSH key file change `id_rsa` for the option `IdentityFile` accordingly. 
+
+Next we build the docker image: 
+
+```bash
+docker build build -t distributed-storage .
+```
+
+This will download latest official Ubuntu image and setup python and everything else you need for this course.
+
+
+# Building Kodo 
+
+Before you continue with the exercises we need to build Kodo. 
+First make a directory which you will use as persistent data storage for the Docker container (they are not persistent by default).
+We will assume that you have called the folder `libs` and that is located in the same folder as the Docker file. 
+Next we start our container: 
 
 ```bash 
-    docker build build -t distributed-storage .
-    
     docker run -it --rm -v FULL_SYSTEM_PATH/distributed-storage-labs/Docker/libs/:/root/libs --entrypoint bash dist-kodo:latest
 ```
 
-# Building Kodo 
+The full system path is from ROOT and all the way down to the final sub-folder `/root/libs` is the "mount point" in the container.
+This is the command you will use to run the container in the future. 
+`--entrypoint bash` gives us a bash terminal instead of the container immediately terminating.
+
+Next, step to ensure that we do not have to type our ssh passphrase over and over. 
+We invoke the ssh-agen and add the `id_rsa` key (again if you changed the name, adopt) and enter the passphrase. 
 
 ```Bash
     ssh-agent bash
     ssh-add /root/.ssh/id_rsa
 ```
+
+Next run:
+
+```bash
+./root/scripts/kodo_clone_and_build.sh
+```
+
+This script clone, configures, and build kodo-python for you and copy `kodo.so` (full name will vary) file in `/root/libs` (which our external folder).
+It also runs the `encode_decode_simple.py` example from kodo-python, if you notice any errors something is afoot. 
+
+Congratulations, you now have a working Docker image than can be used for working with kodo-python. 
+
+# Installing other needed tools. 
+
+TBW 
+
+# Exercises in general
+
+TBW 
 
