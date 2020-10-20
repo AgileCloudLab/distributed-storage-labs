@@ -72,7 +72,7 @@ If you have chosen a different name for your SSH key file change `id_rsa` for th
 Next we build the docker image: 
 
 ```bash
-docker build build -t distributed-storage .
+docker build -t distributed-storage .
 ```
 
 This will download latest official Ubuntu image and setup python and everything else you need for this course.
