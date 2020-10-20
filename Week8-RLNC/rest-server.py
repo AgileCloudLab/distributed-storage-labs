@@ -264,7 +264,8 @@ def add_files_multipart():
 
         storage_details = {
             "coded_fragments": fragment_names,
-            "max_erasures": max_erasures
+            "max_erasures": max_erasures,
+            "fragments_per_node": fragments_per_node
         }
         
     else:
@@ -305,10 +306,28 @@ def add_files():
     return make_response({"id": cursor.lastrowid }, 201)
 #
 
+@app.route('/services/rlnc_repair',  methods=['GET'])
+def rlnc_repair():
+    #Retrieve the list of files stored using RLNC from the database
+    db = get_db()
+    cursor = db.execute("SELECT `id`, `storage_details`, `size` FROM `file` WHERE `storage_mode`='erasure_coding_rlnc'")
+    if not cursor: 
+        return make_response({"message": "Error connecting to the database"}, 500)
+    
+    rlnc_files = cursor.fetchall()
+    rlnc_files = [dict(file) for file in rlnc_files]
+    
+    fragments_missing, fragments_repaired = rlnc.start_repair_process(rlnc_files,
+                                                                      repair_socket,
+                                                                      repair_response_socket)
+
+    return make_response({"fragments_missing": fragments_missing,
+                          "fragments_repaired": fragments_repaired})
+#
+
 
 @app.route('/services/rs_repair',  methods=['GET'])
 def rs_repair():
-
     #Retrieve the list of files stored using Reed-Solomon from the database
     db = get_db()
     cursor = db.execute("SELECT `id`, `storage_details`, `size` FROM `file` WHERE `storage_mode`='erasure_coding_rs'")

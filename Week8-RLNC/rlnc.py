@@ -4,6 +4,7 @@ import random
 import copy # for deepcopy
 from utils import random_string
 import messages_pb2
+import json
 
 STORAGE_NODES_NUM = 4
 
@@ -148,3 +149,77 @@ def get_file(coded_fragments, max_erasures, file_size,
 
     return file_data[:file_size]
 #
+
+
+def start_repair_process(files, repair_socket, repair_response_socket):
+    """
+    Implements the repair process for RLNC-based erasure coding. It receives a list
+    of files that are to be checked. For each file, it sends queries to the Storage
+    nodes to check how many coded fragments are stored safely. If it finds a missing
+    fragment, it determines which Storage node was supposed to store it and repairs it.
+    Based on how many fragments are missing, it instructs the storage nodes to send over
+    a certain number of recoded fragments. It then recodes over these creating as many
+    fragments as were missing, sending the appropriate number to each of the nodes.
+
+    :param files: List of files to be checked
+    :param repair_socket: A ZMQ PUB socket to send requests to the storage nodes
+    :param repair_response_socket: A ZMQ PULL socket on which the storage nodes respond.
+    :return: the number of missing fragments, the number of repaired fragments
+    """
+
+    number_of_missing_fragments = 0
+    number_of_repaired_fragments = 0
+
+    #Check each file for missing fragments to repair
+    for file in files:
+        print("Checking file with id: %s" % file["id"])
+        #We parse the JSON into a python dictionary
+        storage_details = json.loads(file["storage_details"])
+        max_erasures = storage_details["max_erasures"]
+        fragments_per_node = storage_details["fragments_per_node"]
+
+        #Iterate over each node's coded fragments to check that none are missing
+        nodes = set() # list of all storage nodes
+        nodes_with_fragment = set() # list of storage nodes with fragments
+        coded_fragments = storage_details["coded_fragments"] # list of all coded fragments
+        missing_fragments = [] # list of missing coded fragments
+        existing_fragments = [] # list of existing coded fragments
+        for fragment in coded_fragments:
+            fragment_found = False 
+
+            task = messages_pb2.fragment_status_request()
+            task.fragment_name = fragment
+            header = messages_pb2.header()
+            header.request_type = messages_pb2.FRAGMENT_STATUS_REQ
+
+            repair_socket.send_multipart([b"all_nodes",
+                                          header.SerializeToString(),
+                                          task.SerializeToString()])
+
+            # Wait until we receive a response from each node
+            for task_nbr in range(STORAGE_NODES_NUM):
+                msg = repair_response_socket.recv()
+                response = messages_pb2.fragment_status_response()
+                response.ParseFromString(msg)
+                
+                nodes.add(response.node_id) #Build a set of nodes
+                if response.is_present == True:
+                    nodes_with_fragment.add(response.node_id)
+                    existing_fragments.append(fragment)
+                    fragment_found = True
+                    # Check that all fragments with this name are present
+                    if response.count < fragments_per_node:
+                        fragments_lost = fragments_per_node - response.count
+                        print("Partial (%s of %s) RLNC fragment loss for %s"
+                              % (fragments_lost, fragments_per_node, fragment))
+                        number_of_missing_fragments += fragments_lost
+                    else:
+                        print("Fragment %s OK" % fragment)
+
+            # The case when all fragments on a single node are lost
+            if fragment_found == False:
+                print("RLNC all fragments of %s lost" % fragment)
+                missing_fragments.append(fragment)
+                number_of_missing_fragments += fragments_per_node
+
+    return number_of_missing_fragments, number_of_repaired_fragments

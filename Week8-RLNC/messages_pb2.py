@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x0emessages.proto\"%\n\x11storedata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"#\n\x0fgetdata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"0\n\x17\x66ragment_status_request\x12\x15\n\rfragment_name\x18\x01 \x01(\t\"V\n\x18\x66ragment_status_response\x12\x15\n\rfragment_name\x18\x01 \x01(\t\x12\x12\n\nis_present\x18\x02 \x01(\x08\x12\x0f\n\x07node_id\x18\x03 \x01(\t\"-\n\x06header\x12#\n\x0crequest_type\x18\x01 \x01(\x0e\x32\r.request_type*[\n\x0crequest_type\x12\x17\n\x13\x46RAGMENT_STATUS_REQ\x10\x00\x12\x15\n\x11\x46RAGMENT_DATA_REQ\x10\x01\x12\x1b\n\x17STORE_FRAGMENT_DATA_REQ\x10\x02\x62\x06proto3'
+  serialized_pb=b'\n\x0emessages.proto\"%\n\x11storedata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"#\n\x0fgetdata_request\x12\x10\n\x08\x66ilename\x18\x01 \x01(\t\"0\n\x17\x66ragment_status_request\x12\x15\n\rfragment_name\x18\x01 \x01(\t\"e\n\x18\x66ragment_status_response\x12\x15\n\rfragment_name\x18\x01 \x01(\t\x12\x12\n\nis_present\x18\x02 \x01(\x08\x12\x0f\n\x07node_id\x18\x03 \x01(\t\x12\r\n\x05\x63ount\x18\x04 \x01(\x05\"-\n\x06header\x12#\n\x0crequest_type\x18\x01 \x01(\x0e\x32\r.request_type*[\n\x0crequest_type\x12\x17\n\x13\x46RAGMENT_STATUS_REQ\x10\x00\x12\x15\n\x11\x46RAGMENT_DATA_REQ\x10\x01\x12\x1b\n\x17STORE_FRAGMENT_DATA_REQ\x10\x02\x62\x06proto3'
 )
 
 _REQUEST_TYPE = _descriptor.EnumDescriptor(
@@ -48,8 +48,8 @@ _REQUEST_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=279,
-  serialized_end=370,
+  serialized_start=294,
+  serialized_end=385,
 )
 _sym_db.RegisterEnumDescriptor(_REQUEST_TYPE)
 
@@ -185,6 +185,13 @@ _FRAGMENT_STATUS_RESPONSE = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='count', full_name='fragment_status_response.count', index=3,
+      number=4, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -198,7 +205,7 @@ _FRAGMENT_STATUS_RESPONSE = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=144,
-  serialized_end=230,
+  serialized_end=245,
 )
 
 
@@ -229,8 +236,8 @@ _HEADER = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=232,
-  serialized_end=277,
+  serialized_start=247,
+  serialized_end=292,
 )
 
 _HEADER.fields_by_name['request_type'].enum_type = _REQUEST_TYPE
