@@ -9,16 +9,27 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en  
 ENV LC_ALL en_US.UTF-8   
 
-RUN apt-get install -y -qq python3 build-essential libpython3-dev python-dev git wget
-RUN rm /usr/bin/python
+RUN apt-get install -y -qq python3 build-essential libpython3-dev python3-dev git wget
+#RUN rm /usr/bin/python
 RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN mkdir -p ~/.ssh/
+COPY ssh /root/.ssh    
+RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts && \
+    git config --global url."git@github.com:".insteadOf "https://github.com/"
+
+RUN mkdir -p ~/scripts/
+COPY scripts /root/scripts
+RUN chmod +x /root/scripts/kodo_clone_and_build.sh
+
+RUN mkdir -p ~/libs
 
 # Downlod course material 
 # RUN wget  
 
 # Cloning and building kodo-python 
-RUN git clone git@github.com:steinwurf/kodo-python.git
-RUN cd kodo-python && ./waf configure && ./waf build && ./waf test
+# RUN git clone git@github.com:steinwurf/kodo-python.git
+# RUN cd kodo-python && ./waf configure && ./waf build && ./waf test
 
 # 
 
