@@ -232,6 +232,7 @@ while True:
             # Try to load the requested files from the local file system
             fragment_count = 0
             fragments = []
+
             for i in range(1, MAX_CHUNKS_PER_FILE):
                 try:
                     with open(data_folder+'/'+fragment_name+"."+str(i), "rb") as in_file:
@@ -248,20 +249,29 @@ while True:
                 repair_sender.send_multipart(recoded_symbols)
 
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
-            #Fragment store request - same implementation as serving normal data
-            # requests, except for the different socket the response is sent on
+            #Fragment store request
             task = messages_pb2.storedata_request()
             task.ParseFromString(msg[2])
-
-            # The data is the third frame
-            data = msg[3]
-
-            print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
+            chunks_saved = 0
             
-            # Store the chunk with the given filename
-            chunk_local_path = data_folder+'/'+task.filename
-            write_file(data, chunk_local_path)
-            print("Chunk saved to %s" % chunk_local_path)
+            # Iterate over stored chunks, replacing missing ones
+            for i in range(1, MAX_CHUNKS_PER_FILE):
+                #TODO: should start from 0 in all cases
+                chunk_local_path = data_folder+'/'+fragment_name+"."+str(i)
+                if os.path.exists(chunk_local_path) and os.path.isfile(chunk_local_path):
+                    continue # chunk already here
+
+                # Chunk missing
+                # The data starts with the third frame
+                data = msg[3 + chunks_saved]
+                # Store the chunk with the given filename
+                write_file(data, chunk_local_path)
+                chunks_saved += 1
+                print("Chunk saved to %s" % chunk_local_path)
+
+                #Stop when all frames have been consumed (all repair chunks have been saved)
+                if chunks_saved + 3 >= len(msg):
+                    break
 
             # Send response (just the file name)
             repair_sender.send_string(task.filename)

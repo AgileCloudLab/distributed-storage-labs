@@ -221,12 +221,24 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         fragments_per_node = storage_details["fragments_per_node"]
         symbol_count = (STORAGE_NODES_NUM - max_erasures) * fragments_per_node
 
-        #Iterate over each node's coded fragments to check that none are missing
+        '''
+        Iterate over each node's coded fragments to check what is missing.
+        Because this is a distributed system where the central Controller has no knowledge
+        of what is stored on each Strorage node, we build several lists and sets to get an
+        accurate picture. Through these lists and sets we determine:
+        - which nodes respond to our queries
+        - which nodes have a partially missing fragment (and how many subfragments are missing)
+        - which nodes have fully lost their fragment
+        This information will be key in determining where and how many repaired subfragments
+        to send later.
+        '''
         nodes = set() # list of all storage nodes
-        nodes_with_fragment = set() # list of storage nodes with fragments
+        nodes_with_fragment = set() # list of storage nodes with at least partial fragments
         coded_fragments = storage_details["coded_fragments"] # list of all coded fragments
-        missing_fragments = [] # list of missing coded fragments
-        existing_fragments = [] # list of existing coded fragments
+        missing_fragments = [] # list of coded fragments that are fully missing
+        partially_missing_fragments = [] # list of coded fragments that are partially missing
+        existing_fragments = [] # list of coded fragments that are at least in part intact
+
         for fragment in coded_fragments:
             fragment_found = False 
 
@@ -250,21 +262,40 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                     nodes_with_fragment.add(response.node_id)
                     existing_fragments.append(fragment)
                     fragment_found = True
-                    # Check that all fragments with this name are present
+
+                    # Check for partially missing fragments
                     if response.count < fragments_per_node:
-                        fragments_lost = fragments_per_node - response.count
+                        subfragments_lost = fragments_per_node - response.count
                         print("Partial (%s of %s) RLNC fragments lost for %s"
                               % (fragments_lost, fragments_per_node, fragment))
+                        #Register it as a partial fragment loss
+                        partially_missing_fragments.append({"name": fragment,
+                                                            "subfragments_lost": subfragments_lost,
+                                                            "node_id": response.node_id})
                         number_of_missing_fragments += fragments_lost
                     else:
                         print("Fragment %s OK" % fragment)
 
-            # The case when all fragments on a single node are lost
+            # If neither node responded with a positive message, the fragment is fully missing
             if fragment_found == False:
-                print("RLNC all fragments of %s lost" % fragment)
-                missing_fragments.append(fragment)
+                print("RLNC all parts of fragment %s missing" % fragment)
+                #Register it as a full lost fragment, we cannot yet determine which node had it
+                missing_fragments.append({"name": fragment,
+                                          "node_id": "?"})
                 number_of_missing_fragments += fragments_per_node
-#TODO:separate counters for each file
+            #TODO:separate counters for each file
+
+        # We can now determine which nodes had a full missing fragment by subtracting the two
+        # sets from eachother.
+        nodes_without_fragment = list(nodes.difference(nodes_with_fragment))
+        assert(len(nodes_without_fragment) == len(missing_fragments))
+
+        # Assign each full missing fragment to a node that has not fragments stored on it
+        i = 0
+        for node in nodes_without_fragment:
+            missing_fragments[i]["node_id"] = node
+            i += 1
+
         # Perform the actual repair, if necessary
         if number_of_missing_fragments > 0:
             # Check that enough fragments still remain to be able to reconstruct the data
@@ -294,8 +325,58 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                     recoded_symbols.append(bytearray(response[i]))
 
             # Recreate sufficient repair symbols by recoding over the retrieved symbols again
-            re_recoded_symbols = recode(recoded_symbols, symbol_count, number_of_missing_fragments)
+            repair_symbols = recode(recoded_symbols, symbol_count, number_of_missing_fragments)
             print("Retrieved %s recoded symbols from Storage nodes. Created %s new recoded symbols"
-                  % (len(recoded_symbols), len(re_recoded_symbols)))
-                    
+                  % (len(recoded_symbols), len(repair_symbols)))
+
+            # Send the repair symbols to the storage nodes based on the lists we previously built
+            # Full missing fragments (arbitrary choice to have this first as all repair packets
+            # are functionally equivalent)
+            for fragment in missing_fragments:
+                task = messages_pb2.storedata_request()
+                task.filename = fragment["name"]
+
+                header = messages_pb2.header()
+                header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+
+                frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
+                          header.SerializeToString(),
+                          task.SerializeToString()]
+
+                for i in range(number_of_repaired_fragments,
+                               number_of_repaired_fragments + fragments_per_node):
+                    frames.append(bytearray(repair_symbols[i]))
+
+                number_of_repaired_fragments += fragments_per_node
+                repair_socket.send_multipart(frames)
+
+            # Wait until we receive a response for every fragment
+            for task_nbr in range(len(missing_fragments)):
+                resp = repair_response_socket.recv_string()
+                print('Repaired fully missing fragment: %s' % resp)
+
+            # Partially missing fragments
+            for fragment in partially_missing_fragments:
+                task = messages_pb2.storedata_request()
+                task.filename = fragment["name"]
+
+                header = messages_pb2.header()
+                header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+
+                frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
+                          header.SerializeToString(),
+                          task.SerializeToString()]
+
+                for i in range(number_of_repaired_fragments,
+                               number_of_repaired_fragments + fragment["subfragments_lost"]):
+                    frames.append(bytearray(repair_symbols))
+
+                    number_of_repaired_fragments += fragment["subfragments_lost"]
+                repair_socket.send_multipart(frames)
+
+            # Wait until we receive a response for every fragment
+            for task_nbr in range(len(partially_missing_fragments)):
+                resp = repair_response_socket.recv_string()
+                print('Repaired partially missing fragment: %s' % resp)
+
     return number_of_missing_fragments, number_of_repaired_fragments
