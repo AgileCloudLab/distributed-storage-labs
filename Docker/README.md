@@ -112,6 +112,40 @@ It also runs the `encode_decode_simple.py` example from kodo-python, if you noti
 
 Congratulations, you now have a working Docker image than can be used for working with kodo-python. 
 
+# Setup Network for communication 
+
+For communication between the containers we will need a network and a way identify the containers.
+First create a new docker network using the following command where `NAME` is the name of the network, we will use `dist`.
+
+```bash 
+docker network create NAME
+```
+
+When we start our docker containers we can tell them what network to use and we can give the container a name, which will be used for DNS lookup.
+As an example we start a container with the name `server` on the `dist` network: 
+
+```bash
+    docker run -it --rm --network=dist --name=server --entrypoint bash dist-kodo:latest
+```
+
+and let us start a container to act as client:
+
+```bash
+    docker run -it --rm --network=dist --name=client1 --entrypoint bash dist-kodo:latest
+```
+
+On the server go to the directory `root/tests/flask/`. 
+This folder contains a script called: `app.py`, which contains a very simple [FLAS Rest API and Server](https://flask-restful.readthedocs.io/en/latest/quickstart.html#a-minimal-api). 
+Start this script by running `flask run -host=0.0.0.0`.
+From the client we test the communication by running `curl server:5000`, where `server` is the name of the server node set with `--name` in the docker run command.
+We expect the output to be 
+
+```json
+{"hello": "world"}
+```
+
+If this is not the case something has not gone as intended. 
+
 # Installing other needed tools. 
 
 TBW 

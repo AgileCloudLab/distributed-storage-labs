@@ -10,7 +10,8 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8   
 
 RUN apt-get install -y -qq python3 build-essential libpython3-dev python3-dev git wget
-RUN ln -s /usr/bin/python3 /usr/bin/python
+
+RUN pip install flask-restful
 
 RUN mkdir -p ~/.ssh/
 COPY ssh /root/.ssh    
@@ -22,3 +23,4 @@ COPY scripts /root/scripts
 RUN chmod +x /root/scripts/kodo_clone_and_build.sh
 
 RUN mkdir -p ~/libs
+RUN mkdir -p ~/labs
