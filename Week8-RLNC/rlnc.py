@@ -266,13 +266,13 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                     # Check for partially missing fragments
                     if response.count < fragments_per_node:
                         subfragments_lost = fragments_per_node - response.count
-                        print("Partial (%s of %s) RLNC fragments lost for %s"
-                              % (fragments_lost, fragments_per_node, fragment))
+                        print("Partial (%s of %s) RLNC fragments lost for %s from node %s"
+                              % (subfragments_lost, fragments_per_node, fragment, response.node_id))
                         #Register it as a partial fragment loss
                         partially_missing_fragments.append({"name": fragment,
                                                             "subfragments_lost": subfragments_lost,
                                                             "node_id": response.node_id})
-                        number_of_missing_fragments += fragments_lost
+                        number_of_missing_fragments += subfragments_lost
                     else:
                         print("Fragment %s OK" % fragment)
 
@@ -369,7 +369,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
                 for i in range(number_of_repaired_fragments,
                                number_of_repaired_fragments + fragment["subfragments_lost"]):
-                    frames.append(bytearray(repair_symbols))
+                    frames.append(bytearray(repair_symbols[i]))
 
                     number_of_repaired_fragments += fragment["subfragments_lost"]
                 repair_socket.send_multipart(frames)

@@ -200,25 +200,33 @@ while True:
         elif header.request_type == messages_pb2.FRAGMENT_DATA_REQ:
             # Fragment data request - same implementation as serving normal data
             # requests, except for the different socket the response is sent on
+            # and the incoming request's format.
+            # This is currently only used by Reed-Solomon, which stores a single
+            # chunk per storage node
             task = messages_pb2.getdata_request()
             task.ParseFromString(msg[2])
 
             filename = task.filename
             print("Data chunk request: %s" % filename)
 
-            # Try to load the requested file from the local file system,
-            # send response only if found
-            try:
-                with open(data_folder+'/'+filename, "rb") as in_file:
-                    print("Found chunk %s, sending it back" % filename)
-                    
-                    repair_sender.send_multipart([
-                        bytes(filename, 'utf-8'),
-                        in_file.read()
-                    ])
-            except FileNotFoundError:
-                # This is OK here
-                pass
+            #Try to load all fragments with this name
+            #First frame of the response is the filename
+            frames = [bytes(filename, 'utf-8')]
+            #Subsequent frames will contain the file data
+            for i in range(1, MAX_CHUNKS_PER_FILE):
+                try:
+                    with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
+                        print("Found chunk %s, sending it back" % filename)
+                        # Add chunk as a new frame
+                        frames.append(in_file.read())
+
+                except FileNotFoundError:
+                    # This is OK here
+                    break
+
+            #Only send a result if at least one chunk was found
+            if(len(frames)>1):
+                sender.send_multipart(frames)
 
         elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
             # Recode fragment data request
@@ -252,6 +260,7 @@ while True:
             #Fragment store request
             task = messages_pb2.storedata_request()
             task.ParseFromString(msg[2])
+            fragment_name = task.filename
             chunks_saved = 0
             
             # Iterate over stored chunks, replacing missing ones
