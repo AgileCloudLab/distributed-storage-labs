@@ -8,14 +8,14 @@ import json
 
 STORAGE_NODES_NUM = 4
 
-def store_file(file_data, max_erasures, fragments_per_node,
+def store_file(file_data, max_erasures, subfragments_per_node,
                send_task_socket, response_socket):
     """
     Store a file using RLNC, protecting it against 'max_erasures' unavailable storage nodes. 
 
     :param file_data: The file contents to be stored as a Python bytearray 
     :param max_erasures: How many storage node failures should the data survive
-    :param fragments_per_node: How many fragments are stored per node
+    :param subfragments_per_node: How many sugfragments are stored per fragment on a node
     :param send_task_socket: A ZMQ PUSH socket to the storage nodes
     :param response_socket: A ZMQ PULL socket where the storage nodes respond
     :return: A list of the coded fragment names, e.g. (c1,c2,c3,c4)
@@ -26,10 +26,10 @@ def store_file(file_data, max_erasures, fragments_per_node,
     assert(max_erasures < STORAGE_NODES_NUM)
 
     # At least one fragment per node
-    assert(fragments_per_node > 0)
+    assert(subfragments_per_node > 0)
 
     # How many coded fragments (=symbols) will be required to reconstruct the encoded data. 
-    symbols = (STORAGE_NODES_NUM - max_erasures) * fragments_per_node
+    symbols = (STORAGE_NODES_NUM - max_erasures) * subfragments_per_node
     # The size of one coded fragment (total size/number of symbols, rounded up)
     symbol_size = math.ceil(len(file_data)/symbols)
     # Kodo RLNC encoder using 2^8 finite field
@@ -38,7 +38,7 @@ def store_file(file_data, max_erasures, fragments_per_node,
 
     fragment_names = []
 
-    # Generate several coded fragments for each Storage Node
+    # Generate several coded subfragments for each Storage Node
     for i in range(STORAGE_NODES_NUM):
 
         # Generate a random name for them and save
@@ -49,16 +49,13 @@ def store_file(file_data, max_erasures, fragments_per_node,
         task = messages_pb2.storedata_request()
         task.filename = name
         
-        # Stores all fragments that go to one Storage node
+        # Stores all subfragments that go to one Storage node
         # First frame contains the task
         frames = [task.SerializeToString()] 
 
-        for j in range(fragments_per_node):
+        for j in range(subfragments_per_node):
             # Create a random coefficient vector
-            coefficients = bytearray()
-            for k in range(symbols):
-                coefficients.append(random.randint(0,255))
-
+            coefficients = encoder.recoder_generate()
             # Generate a coded fragment with these coefficients 
             symbol = encoder.produce_symbol(coefficients)
             frames.append(coefficients + bytearray(symbol))
@@ -79,7 +76,7 @@ def decode_file(symbols):
     """
     Decode a file using RLNC decoder and the provided coded symbols.
     The number of symbols must be the same as (STORAGE_NODES_NUM - max_erasures) *
-    fragments_per_node.
+    subfragments_per_node. This is almost identical to the Reed-Solomon equivalent function.
 
     :param symbols: coded symbols that contain both the coefficients and symbol data
     :return: the decoded file data
@@ -104,14 +101,15 @@ def decode_file(symbols):
         print("File decoded successfully")
     else:
         print("Decoding file failed! Decoder rank %s from %s symbols" % (decoder.rank(), len(symbols)))
+        # In a real system we might add more complex error handling
 
     return data_out
 #
 
 def recode(symbols, symbol_count, output_symbol_count):
     """
-    Recode a file using RLNC decoder and the provided coded symbols.
-    The symbols are fed into the decoder where output_symbol_count symbols are created
+    Recode a file using an RLNC recoder and the provided coded symbols.
+    The symbols are fed into the recoder where output_symbol_count symbols are created
     by generating new linear combinations.
     Examples of different techiques to recode using Kodo can be found here:
     https://github.com/steinwurf/kodo-python/blob/master/examples/pure_recode_symbol_api.py
@@ -126,8 +124,6 @@ def recode(symbols, symbol_count, output_symbol_count):
 
     symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
     recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
-   # symbol_storage = bytearray(decoder.block_size())
-   # decoder.set_symbols_storage(symbol_storage)
 
     # Feed the provided symbols to the decoder
     for symbol in symbols:
@@ -154,7 +150,8 @@ def recode(symbols, symbol_count, output_symbol_count):
 def get_file(coded_fragments, max_erasures, file_size,
              data_req_socket, response_socket):
     """
-    Implements retrieving a file that is stored with Reed Solomon erasure coding
+    Implements retrieving a file that is stored with RLNC erasure coding. 
+    Similar to Reed-Solomon equivalent function.
 
     :param coded_fragments: Names of the coded fragments
     :param max_erasures: Max erasures setting that was used when storing the file
@@ -220,8 +217,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         #We parse the JSON into a python dictionary
         storage_details = json.loads(file["storage_details"])
         max_erasures = storage_details["max_erasures"]
-        fragments_per_node = storage_details["fragments_per_node"]
-        symbol_count = (STORAGE_NODES_NUM - max_erasures) * fragments_per_node
+        subfragments_per_node = storage_details["subfragments_per_node"]
+        symbol_count = (STORAGE_NODES_NUM - max_erasures) * subfragments_per_node
 
         '''
         Iterate over each node's coded fragments to check what is missing.
@@ -268,10 +265,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                     fragment_found = True
 
                     # Check for partially missing fragments
-                    if response.count < fragments_per_node:
-                        subfragments_lost = fragments_per_node - response.count
+                    if response.count < subfragments_per_node:
+                        subfragments_lost = subfragments_per_node - response.count
                         print("Partial (%s of %s) RLNC fragments lost for %s from node %s"
-                              % (subfragments_lost, fragments_per_node, fragment, response.node_id))
+                              % (subfragments_lost, subfragments_per_node, fragment, response.node_id))
                         #Register it as a partial fragment loss
                         partially_missing_fragments.append({"name": fragment,
                                                             "subfragments_lost": subfragments_lost,
@@ -286,7 +283,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 #Register it as a full lost fragment, we cannot yet determine which node had it
                 missing_fragments.append({"name": fragment,
                                           "node_id": "?"})
-                number_of_missing_fragments += fragments_per_node
+                number_of_missing_fragments += subfragments_per_node
 
         # We can now determine which nodes had a full missing fragment by subtracting the two
         # sets from eachother.
@@ -302,7 +299,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         # Perform the actual repair, if necessary
         if number_of_missing_fragments > 0:
             # Check that enough fragments still remain to be able to reconstruct the data
-            if number_of_missing_fragments > max_erasures * fragments_per_node:
+            if number_of_missing_fragments > max_erasures * subfragments_per_node:
                 print("Too many lost fragments: %s. Unable to repair file. " % number_of_missing_fragments)
                 continue
 
@@ -313,7 +310,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 task.symbol_count = symbol_count
                 # Request as many fragments as the node originally had stored.
                 # Quite wasteful, surely we can do better
-                task.output_fragment_count = fragments_per_node
+                task.output_fragment_count = subfragments_per_node
 
                 header = messages_pb2.header()
                 header.request_type = messages_pb2.RECODE_FRAGMENTS_REQ
@@ -349,10 +346,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                           task.SerializeToString()]
 
                 for i in range(number_of_repaired_fragments,
-                               number_of_repaired_fragments + fragments_per_node):
+                               number_of_repaired_fragments + subfragments_per_node):
                     frames.append(bytearray(repair_symbols[i]))
 
-                number_of_repaired_fragments += fragments_per_node
+                number_of_repaired_fragments += subfragments_per_node
                 repair_socket.send_multipart(frames)
 
             # Wait until we receive a response for every fragment
