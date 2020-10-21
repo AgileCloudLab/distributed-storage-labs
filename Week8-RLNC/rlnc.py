@@ -7,6 +7,7 @@ import messages_pb2
 import json
 
 STORAGE_NODES_NUM = 4
+FRAGMENTS_TO_REPAIR_WITH = 5
 
 def store_file(file_data, max_erasures, fragments_per_node,
                send_task_socket, response_socket):
@@ -100,8 +101,10 @@ def decode_file(symbols):
         decoder.consume_symbol(symbol_data, coefficients)
 
     # Make sure the decoder successfully reconstructed the file
-    assert(decoder.is_complete())
-    print("File decoded successfully")
+    if(decoder.is_complete()):
+        print("File decoded successfully")
+    else:
+        print("Decoding file failed! Decoder rank %s from %s symbols" % (decoder.rank(), len(symbols)))
 
     return data_out
 #
@@ -308,7 +311,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 task = messages_pb2.recode_fragments_request()
                 task.fragment_name = fragment
                 task.symbol_count = symbol_count
-                task.output_fragment_count = 2
+                task.output_fragment_count = FRAGMENTS_TO_REPAIR_WITH
                 #TODO: test what happens if we request more than the storage node cans provide
                 header = messages_pb2.header()
                 header.request_type = messages_pb2.RECODE_FRAGMENTS_REQ

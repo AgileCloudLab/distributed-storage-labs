@@ -110,8 +110,8 @@ while True:
         task.ParseFromString(msg[0])
 
         # The data starts with the second frame, iterate and store all frames
-        for i in range(1, len(msg)):
-            data = msg[i]
+        for i in range(0, len(msg)-1):
+            data = msg[1+i]
 
             print('Chunk to save: %s, size: %d bytes' %
                   (task.filename + "." + str(i), len(data)))
@@ -140,7 +140,7 @@ while True:
         #First frame is the filename
         frames = [bytes(filename, 'utf-8')]
         #Subsequent frames will contain the file data
-        for i in range(1, MAX_CHUNKS_PER_FILE):
+        for i in range(0, MAX_CHUNKS_PER_FILE):
             try:
                 with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
                     print("Found chunk %s, sending it back" % filename)
@@ -178,7 +178,7 @@ while True:
             fragment_name = task.fragment_name
             fragment_count = 0
             # Check whether the fragment is on the disk
-            for i in range(1, MAX_CHUNKS_PER_FILE):
+            for i in range(0, MAX_CHUNKS_PER_FILE):
                 fragment_found = os.path.exists(data_folder+'/'+fragment_name+"."+str(i)) and \
                                  os.path.isfile(data_folder+'/'+fragment_name+"."+str(i))
                 
@@ -202,7 +202,7 @@ while True:
             # requests, except for the different socket the response is sent on
             # and the incoming request's format.
             # This is currently only used by Reed-Solomon, which stores a single
-            # chunk per storage node
+            # chunk per storage node.
             task = messages_pb2.getdata_request()
             task.ParseFromString(msg[2])
 
@@ -213,7 +213,7 @@ while True:
             #First frame of the response is the filename
             frames = [bytes(filename, 'utf-8')]
             #Subsequent frames will contain the file data
-            for i in range(1, MAX_CHUNKS_PER_FILE):
+            for i in range(0, MAX_CHUNKS_PER_FILE):
                 try:
                     with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
                         print("Found chunk %s, sending it back" % filename)
@@ -241,7 +241,7 @@ while True:
             fragment_count = 0
             fragments = []
 
-            for i in range(1, MAX_CHUNKS_PER_FILE):
+            for i in range(0, MAX_CHUNKS_PER_FILE):
                 try:
                     with open(data_folder+'/'+fragment_name+"."+str(i), "rb") as in_file:
                         fragments.append(bytearray(in_file.read()))
@@ -264,7 +264,7 @@ while True:
             chunks_saved = 0
             
             # Iterate over stored chunks, replacing missing ones
-            for i in range(1, MAX_CHUNKS_PER_FILE):
+            for i in range(0, MAX_CHUNKS_PER_FILE):
                 #TODO: should start from 0 in all cases
                 chunk_local_path = data_folder+'/'+fragment_name+"."+str(i)
                 if os.path.exists(chunk_local_path) and os.path.isfile(chunk_local_path):
