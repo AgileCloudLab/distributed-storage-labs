@@ -7,7 +7,6 @@ import messages_pb2
 import json
 
 STORAGE_NODES_NUM = 4
-FRAGMENTS_TO_REPAIR_WITH = 5
 
 def store_file(file_data, max_erasures, fragments_per_node,
                send_task_socket, response_socket):
@@ -126,7 +125,7 @@ def recode(symbols, symbol_count, output_symbol_count):
     """
 
     symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
-    recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, len(symbols))
+    recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
    # symbol_storage = bytearray(decoder.block_size())
    # decoder.set_symbols_storage(symbol_storage)
 
@@ -212,8 +211,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
     :return: the number of missing fragments, the number of repaired fragments
     """
 
-    number_of_missing_fragments = 0
-    number_of_repaired_fragments = 0
+    total_number_of_missing_fragments = 0
+    total_number_of_repaired_fragments = 0
 
     #Check each file for missing fragments to repair
     for file in files:
@@ -241,6 +240,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         missing_fragments = [] # list of coded fragments that are fully missing
         partially_missing_fragments = [] # list of coded fragments that are partially missing
         existing_fragments = [] # list of coded fragments that are at least in part intact
+        number_of_missing_fragments = 0
+        number_of_repaired_fragments = 0
 
         for fragment in coded_fragments:
             fragment_found = False 
@@ -286,7 +287,6 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 missing_fragments.append({"name": fragment,
                                           "node_id": "?"})
                 number_of_missing_fragments += fragments_per_node
-            #TODO:separate counters for each file
 
         # We can now determine which nodes had a full missing fragment by subtracting the two
         # sets from eachother.
@@ -311,8 +311,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 task = messages_pb2.recode_fragments_request()
                 task.fragment_name = fragment
                 task.symbol_count = symbol_count
-                task.output_fragment_count = FRAGMENTS_TO_REPAIR_WITH
-                #TODO: test what happens if we request more than the storage node cans provide
+                # Request as many fragments as the node originally had stored.
+                # Quite wasteful, surely we can do better
+                task.output_fragment_count = fragments_per_node
+
                 header = messages_pb2.header()
                 header.request_type = messages_pb2.RECODE_FRAGMENTS_REQ
                 
@@ -374,7 +376,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                                number_of_repaired_fragments + fragment["subfragments_lost"]):
                     frames.append(bytearray(repair_symbols[i]))
 
-                    number_of_repaired_fragments += fragment["subfragments_lost"]
+                number_of_repaired_fragments += fragment["subfragments_lost"]
                 repair_socket.send_multipart(frames)
 
             # Wait until we receive a response for every fragment
@@ -382,4 +384,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 resp = repair_response_socket.recv_string()
                 print('Repaired partially missing fragment: %s' % resp)
 
-    return number_of_missing_fragments, number_of_repaired_fragments
+        # Add the per-file counters to the total tally
+        total_number_of_missing_fragments += number_of_missing_fragments
+        total_number_of_repaired_fragments += number_of_repaired_fragments
+
+    return total_number_of_repaired_fragments, total_number_of_repaired_fragments
