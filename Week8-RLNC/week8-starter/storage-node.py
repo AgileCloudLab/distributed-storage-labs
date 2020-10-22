@@ -229,61 +229,10 @@ while True:
                 sender.send_multipart(frames)
 
         elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
-            # Recode fragment data request, specific to RLNC repairs
-            task = messages_pb2.recode_fragments_request()
-            task.ParseFromString(msg[2])
-            fragment_name = task.fragment_name
-            symbol_count = task.symbol_count
-            output_fragment_count = task.output_fragment_count
-            print("Recoded fragment request: %s" % fragment_name)
-
-            # Try to load the requested files from the local file system
-            fragment_count = 0
-            fragments = []
-
-            for i in range(0, MAX_CHUNKS_PER_FILE):
-                try:
-                    with open(data_folder+'/'+fragment_name+"."+str(i), "rb") as in_file:
-                        fragments.append(bytearray(in_file.read()))
-                    fragment_count += 1
-                except FileNotFoundError:
-                    # This is OK here
-                    pass
-
-            #If at least one fragment is found, recode and send the result
-            if fragment_count > 0:
-                recoded_symbols = rlnc.recode(fragments, symbol_count, output_fragment_count)
-                print("Fragment found, sending requested recoded symbols")
-                repair_sender.send_multipart(recoded_symbols)
+            # TO BE DONE
 
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
-            #Fragment store request
-            task = messages_pb2.storedata_request()
-            task.ParseFromString(msg[2])
-            chunk_name = task.filename
-            chunks_saved = 0
-            
-            # Iterate over stored chunks, replacing missing ones
-            for i in range(0, MAX_CHUNKS_PER_FILE):
-                #TODO: should start from 0 in all cases
-                chunk_local_path = data_folder+'/'+chunk_name+"."+str(i)
-                if os.path.exists(chunk_local_path) and os.path.isfile(chunk_local_path):
-                    continue # chunk already here
-
-                # Chunk missing
-                # The data starts with the third frame
-                data = msg[3 + chunks_saved]
-                # Store the chunk with the given filename
-                write_file(data, chunk_local_path)
-                chunks_saved += 1
-                print("Chunk saved to %s" % chunk_local_path)
-
-                #Stop when all frames have been consumed (all repair fragments have been saved)
-                if chunks_saved + 3 >= len(msg):
-                    break
-
-            # Send response (just the file name)
-            repair_sender.send_string(task.filename)
+           pass
 
         else:
             print("Message type not supported")

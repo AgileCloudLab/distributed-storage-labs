@@ -265,7 +265,6 @@ while True:
             
             # Iterate over stored chunks, replacing missing ones
             for i in range(0, MAX_CHUNKS_PER_FILE):
-                #TODO: should start from 0 in all cases
                 chunk_local_path = data_folder+'/'+chunk_name+"."+str(i)
                 if os.path.exists(chunk_local_path) and os.path.isfile(chunk_local_path):
                     continue # chunk already here
