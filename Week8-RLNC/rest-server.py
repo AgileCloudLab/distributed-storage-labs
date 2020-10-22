@@ -255,17 +255,17 @@ def add_files_multipart():
         max_erasures = int(payload.get('max_erasures', 1))
         print("Max erasures: %d" % (max_erasures))
 
-        fragments_per_node = int(payload.get('fragments_per_node', 3))
-        print("Fragments per node: %d" % (fragments_per_node))
+        subfragments_per_node = int(payload.get('subfragments_per_node', 3))
+        print("Subfragments per node: %d" % (subfragments_per_node))
 
         # Store the file contents with Random Linear Network Coding encoding
-        fragment_names = rlnc.store_file(data, max_erasures, fragments_per_node,
+        fragment_names = rlnc.store_file(data, max_erasures, subfragments_per_node,
                                          send_task_socket, response_socket)
 
         storage_details = {
             "coded_fragments": fragment_names,
             "max_erasures": max_erasures,
-            "fragments_per_node": fragments_per_node
+            "subfragments_per_node": subfragments_per_node
         }
         
     else:
@@ -355,6 +355,7 @@ def rs_automated_repair():
 #Create a scheduler and post a repair job every 60 seconds
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=rs_automated_repair, trigger="interval", seconds=60)
+#Temporarily disabled scheduler
 #scheduler.start()
 
 # Shut down the scheduler when exiting the app

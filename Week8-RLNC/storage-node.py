@@ -136,10 +136,10 @@ while True:
         filename = task.filename
         print("Data chunk request: %s" % filename)
 
-        #Try to load all fragments with this name
-        #First frame is the filename
+        # Try to load all fragments with this name
+        # First frame is the filename
         frames = [bytes(filename, 'utf-8')]
-        #Subsequent frames will contain the file data
+        # Subsequent frames will contain the chunks' data
         for i in range(0, MAX_CHUNKS_PER_FILE):
             try:
                 with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
@@ -161,7 +161,7 @@ while True:
         # Parse the multi-part message
         msg = repair_subscriber.recv_multipart()
 
-        # The topic is sent a frame 0
+        # The topic is sent as frame 0
         #topic = str(msg[0])
         
         # Parse the header from frame 1. This is used to distinguish between
@@ -175,25 +175,25 @@ while True:
             task = messages_pb2.fragment_status_request()
             task.ParseFromString(msg[2])
 
-            fragment_name = task.fragment_name
-            fragment_count = 0
-            # Check whether the fragment is on the disk
+            chunk_name = task.fragment_name
+            chunk_count = 0
+            # Check whether the chunks are on the disk
             for i in range(0, MAX_CHUNKS_PER_FILE):
-                fragment_found = os.path.exists(data_folder+'/'+fragment_name+"."+str(i)) and \
-                                 os.path.isfile(data_folder+'/'+fragment_name+"."+str(i))
+                chunk_found = os.path.exists(data_folder+'/'+chunk_name+"."+str(i)) and \
+                                 os.path.isfile(data_folder+'/'+chunk_name+"."+str(i))
                 
-                if fragment_found == True:
-                    print("Status request for fragment: %s - Found" % fragment_name)
-                    fragment_count += 1
+                if chunk_found == True:
+                    print("Status request for fragment: %s - Found" % chunk_name)
+                    chunk_count += 1
                 else:
-                    print("Status request for fragment: %s - Not found" % fragment_name)
+                    print("Status request for fragment: %s - Not found" % chunk_name)
 
             # Send the response
             response = messages_pb2.fragment_status_response()
-            response.fragment_name = fragment_name
-            response.is_present = fragment_count > 0
+            response.fragment_name = chunk_name
+            response.is_present = chunk_count > 0
             response.node_id = node_id
-            response.count = fragment_count
+            response.count = chunk_count
 
             repair_sender.send(response.SerializeToString())
 
@@ -229,7 +229,7 @@ while True:
                 sender.send_multipart(frames)
 
         elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
-            # Recode fragment data request
+            # Recode fragment data request, specific to RLNC repairs
             task = messages_pb2.recode_fragments_request()
             task.ParseFromString(msg[2])
             fragment_name = task.fragment_name
@@ -260,13 +260,13 @@ while True:
             #Fragment store request
             task = messages_pb2.storedata_request()
             task.ParseFromString(msg[2])
-            fragment_name = task.filename
+            chunk_name = task.filename
             chunks_saved = 0
             
             # Iterate over stored chunks, replacing missing ones
             for i in range(0, MAX_CHUNKS_PER_FILE):
                 #TODO: should start from 0 in all cases
-                chunk_local_path = data_folder+'/'+fragment_name+"."+str(i)
+                chunk_local_path = data_folder+'/'+chunk_name+"."+str(i)
                 if os.path.exists(chunk_local_path) and os.path.isfile(chunk_local_path):
                     continue # chunk already here
 
@@ -278,7 +278,7 @@ while True:
                 chunks_saved += 1
                 print("Chunk saved to %s" % chunk_local_path)
 
-                #Stop when all frames have been consumed (all repair chunks have been saved)
+                #Stop when all frames have been consumed (all repair fragments have been saved)
                 if chunks_saved + 3 >= len(msg):
                     break
 
