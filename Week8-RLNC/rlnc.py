@@ -194,6 +194,76 @@ def get_file(coded_fragments, max_erasures, file_size,
 #
 
 
+def __store_repair_fragments(missing_fragments, partially_missing_fragments,
+                             repair_symbols, subfragments_per_node,
+                             repair_socket, repair_response_socket):
+    '''
+    Sends the repaired fragments/subfragments to the appropriate storage nodes
+
+    :param missing fragments: Fragments that are completely missing
+    :param partially_missing fragments: Fragments with missing subfragments
+    :param repair_symbols: the symbols(subfragments) to store
+    :param subfragments_per_node: number of subfragments per fragment
+    :param repair_socket: A ZMQ PUB socket to send requests to the storage nodes
+    :param repair_response_socket: A ZMQ PULL socket on which the storage nodes respond.
+    :return: the number of repaired subfragments
+    '''
+
+    number_of_repaired_subfragments = 0
+
+    # 1. Full missing fragments (arbitrary choice to have this first as all repair packets
+    # are functionally equivalent)
+    for fragment in missing_fragments:
+        task = messages_pb2.storedata_request()
+        task.filename = fragment["name"]
+
+        header = messages_pb2.header()
+        header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+
+        frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
+                  header.SerializeToString(),
+                  task.SerializeToString()]
+
+        for i in range(number_of_repaired_subfragments,
+                       number_of_repaired_subfragments + subfragments_per_node):
+            frames.append(bytearray(repair_symbols[i]))
+
+        number_of_repaired_subfragments += subfragments_per_node
+        repair_socket.send_multipart(frames)
+
+        # Wait until we receive a response for every fragment
+        for task_nbr in range(len(missing_fragments)):
+            resp = repair_response_socket.recv_string()
+            print('Repaired fully missing fragment: %s' % resp)
+
+        # 2. Partially missing fragments
+        for fragment in partially_missing_fragments:
+            task = messages_pb2.storedata_request()
+            task.filename = fragment["name"]
+
+            header = messages_pb2.header()
+            header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+
+            frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
+                      header.SerializeToString(),
+                      task.SerializeToString()]
+
+            for i in range(number_of_repaired_subfragments,
+                           number_of_repaired_subfragments + fragment["subfragments_lost"]):
+                frames.append(bytearray(repair_symbols[i]))
+
+            number_of_repaired_subfragments += fragment["subfragments_lost"]
+            repair_socket.send_multipart(frames)
+
+        # Wait until we receive a response for every fragment
+        for task_nbr in range(len(partially_missing_fragments)):
+            resp = repair_response_socket.recv_string()
+            print('Repaired partially missing fragment: %s' % resp)
+
+    return number_of_repaired_subfragments
+#
+
+
 def start_repair_process(files, repair_socket, repair_response_socket):
     """
     Implements the repair process for RLNC-based erasure coding. It receives a list
@@ -210,8 +280,8 @@ def start_repair_process(files, repair_socket, repair_response_socket):
     :return: the number of missing subfragments, the number of repaired subfragments
     """
 
-    total_number_of_missing_subfragments = 0
-    total_number_of_repaired_subfragments = 0
+    total_missing_subfragment_count = 0
+    total_repaired_subfragment_count = 0
 
     #Check each file for missing fragments to repair
     for file in files:
@@ -239,8 +309,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         missing_fragments = [] # list of coded fragments that are fully missing
         partially_missing_fragments = [] # list of coded fragments that are partially missing
         existing_fragments = [] # list of coded fragments that are at least in part intact
-        number_of_missing_subfragments = 0
-        number_of_repaired_subfragments = 0
+        missing_subfragment_count = 0
 
         for fragment in coded_fragments:
             fragment_found = False 
@@ -275,7 +344,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                         partially_missing_fragments.append({"name": fragment,
                                                             "subfragments_lost": subfragments_lost,
                                                             "node_id": response.node_id})
-                        number_of_missing_subfragments += subfragments_lost
+                        missing_subfragment_count += subfragments_lost
                     else:
                         print("Fragment %s OK" % fragment)
 
@@ -285,7 +354,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 #Register it as a full lost fragment, we cannot yet determine which node had it
                 missing_fragments.append({"name": fragment,
                                           "node_id": "?"})
-                number_of_missing_subfragments += subfragments_per_node
+                missing_subfragment_count += subfragments_per_node
 
         # We can now determine which nodes had a full missing fragment by subtracting the two
         # sets from eachother.
@@ -300,10 +369,10 @@ def start_repair_process(files, repair_socket, repair_response_socket):
 
 
         # Perform the actual repair, if necessary
-        if number_of_missing_subfragments > 0:
+        if missing_subfragment_count > 0:
             # Check that enough fragments still remain to be able to reconstruct the data
-            if number_of_missing_subfragments > max_erasures * subfragments_per_node:
-                print("Too many lost fragments: %s. Unable to repair file. " % number_of_missing_subfragments)
+            if missing_subfragment_count > max_erasures * subfragments_per_node:
+                print("Too many lost fragments: %s. Unable to repair file. " % missing_subfragment_count)
                 continue # Move onto the next file
 
             #Retrieve sufficient fragments and recode
@@ -329,63 +398,19 @@ def start_repair_process(files, repair_socket, repair_response_socket):
                 for i in range(len(response)):
                     recoded_symbols.append(bytearray(response[i]))
 
+
             # Recreate sufficient repair symbols by recoding over the retrieved symbols again
-            repair_symbols = recode(recoded_symbols, symbol_count, number_of_missing_subfragments)
+            repair_symbols = recode(recoded_symbols, symbol_count, missing_subfragment_count)
             print("Retrieved %s recoded symbols from Storage nodes. Created %s new recoded symbols"
                   % (len(recoded_symbols), len(repair_symbols)))
 
             # Send the repair symbols to the storage nodes based on the lists we previously built
-            # 1. Full missing fragments (arbitrary choice to have this first as all repair packets
-            # are functionally equivalent)
-            for fragment in missing_fragments:
-                task = messages_pb2.storedata_request()
-                task.filename = fragment["name"]
-
-                header = messages_pb2.header()
-                header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
-
-                frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
-                          header.SerializeToString(),
-                          task.SerializeToString()]
-
-                for i in range(number_of_repaired_subfragments,
-                               number_of_repaired_subfragments + subfragments_per_node):
-                    frames.append(bytearray(repair_symbols[i]))
-
-                number_of_repaired_subfragments += subfragments_per_node
-                repair_socket.send_multipart(frames)
-
-            # Wait until we receive a response for every fragment
-            for task_nbr in range(len(missing_fragments)):
-                resp = repair_response_socket.recv_string()
-                print('Repaired fully missing fragment: %s' % resp)
-
-            # 2. Partially missing fragments
-            for fragment in partially_missing_fragments:
-                task = messages_pb2.storedata_request()
-                task.filename = fragment["name"]
-
-                header = messages_pb2.header()
-                header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
-
-                frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
-                          header.SerializeToString(),
-                          task.SerializeToString()]
-
-                for i in range(number_of_repaired_subfragments,
-                               number_of_repaired_subfragments + fragment["subfragments_lost"]):
-                    frames.append(bytearray(repair_symbols[i]))
-
-                number_of_repaired_subfragments += fragment["subfragments_lost"]
-                repair_socket.send_multipart(frames)
-
-            # Wait until we receive a response for every fragment
-            for task_nbr in range(len(partially_missing_fragments)):
-                resp = repair_response_socket.recv_string()
-                print('Repaired partially missing fragment: %s' % resp)
+            repaired_subfragment_count = __store_repair_fragments(missing_fragments, partially_missing_fragments,
+                                                                  repair_symbols, subfragments_per_node,
+                                                                  repair_socket, repair_response_socket)
 
         # Add the per-file counters to the total tally
-        total_number_of_missing_subfragments += number_of_missing_subfragments
-        total_number_of_repaired_subfragments += number_of_repaired_subfragments
+        total_missing_subfragment_count += missing_subfragment_count
+        total_repaired_subfragment_count += repaired_subfragment_count
 
-    return total_number_of_repaired_subfragments, total_number_of_repaired_subfragments
+    return total_repaired_subfragment_count, total_repaired_subfragment_count
