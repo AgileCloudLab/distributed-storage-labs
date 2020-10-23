@@ -284,7 +284,7 @@ def add_files():
     return make_response({"id": cursor.lastrowid }, 201)
 #
 
-# TO BE DONE: repair endpoint goes here
+# TO BE DONE: RLNC repair endpoint goes here
 
 
 

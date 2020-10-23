@@ -92,6 +92,7 @@ poller.register(receiver, zmq.POLLIN)
 poller.register(subscriber, zmq.POLLIN)
 poller.register(repair_subscriber, zmq.POLLIN)
 
+
 while True:
     try:
         # Poll all sockets
@@ -109,17 +110,15 @@ while True:
         task = messages_pb2.storedata_request()
         task.ParseFromString(msg[0])
 
-        # The data starts with the second frame, iterate and store all frames
-        for i in range(0, len(msg)-1):
-            data = msg[1+i]
+        # The data is the second frame
+        data = msg[1]
 
-            print('Chunk to save: %s, size: %d bytes' %
-                  (task.filename + "." + str(i), len(data)))
+        print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
 
-            # Store the chunk with the given filename
-            chunk_local_path = data_folder+'/'+task.filename+"."+str(i)
-            write_file(data, chunk_local_path)
-            print("Chunk saved to %s" % chunk_local_path)
+        # Store the chunk with the given filename
+        chunk_local_path = data_folder+'/'+task.filename
+        write_file(data, chunk_local_path)
+        print("Chunk saved to %s" % chunk_local_path)
 
         # Send response (just the file name)
         sender.send_string(task.filename)
@@ -136,24 +135,19 @@ while True:
         filename = task.filename
         print("Data chunk request: %s" % filename)
 
-        # Try to load all fragments with this name
-        # First frame is the filename
-        frames = [bytes(filename, 'utf-8')]
-        # Subsequent frames will contain the chunks' data
-        for i in range(0, MAX_CHUNKS_PER_FILE):
-            try:
-                with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
-                    print("Found chunk %s, sending it back" % filename)
-                    # Add chunk as a new frame
-                    frames.append(in_file.read())
+        # Try to load the requested file from the local file system,
+        # send response only if found
+        try:
+            with open(data_folder+'/'+filename, "rb") as in_file:
+                print("Found chunk %s, sending it back" % filename)
 
-            except FileNotFoundError:
-                # This is OK here
-                break
-
-        #Only send a result if at least one chunk was found
-        if(len(frames)>1):
-            sender.send_multipart(frames)
+                sender.send_multipart([
+                    bytes(filename, 'utf-8'),
+                    in_file.read()
+                ])
+        except FileNotFoundError:
+            # This is OK here
+            pass
 
     if repair_subscriber in socks:
         # Incoming message on the 'repair_subscriber' socket
@@ -161,7 +155,7 @@ while True:
         # Parse the multi-part message
         msg = repair_subscriber.recv_multipart()
 
-        # The topic is sent as frame 0
+        # The topic is sent a frame 0
         #topic = str(msg[0])
         
         # Parse the header from frame 1. This is used to distinguish between
@@ -175,64 +169,65 @@ while True:
             task = messages_pb2.fragment_status_request()
             task.ParseFromString(msg[2])
 
-            chunk_name = task.fragment_name
-            chunk_count = 0
-            # Check whether the chunks are on the disk
-            for i in range(0, MAX_CHUNKS_PER_FILE):
-                chunk_found = os.path.exists(data_folder+'/'+chunk_name+"."+str(i)) and \
-                                 os.path.isfile(data_folder+'/'+chunk_name+"."+str(i))
-                
-                if chunk_found == True:
-                    print("Status request for fragment: %s - Found" % chunk_name)
-                    chunk_count += 1
-                else:
-                    print("Status request for fragment: %s - Not found" % chunk_name)
+            fragment_name = task.fragment_name
+            # Check whether the fragment is on the disk
+            fragment_found = os.path.exists(data_folder+'/'+fragment_name) and \
+                             os.path.isfile(data_folder+'/'+fragment_name)
+            
+            if fragment_found == True:
+                print("Status request for fragment: %s - Found" % fragment_name)
+            else:
+                print("Status request for fragment: %s - Not found" % fragment_name)
 
             # Send the response
             response = messages_pb2.fragment_status_response()
-            response.fragment_name = chunk_name
-            response.is_present = chunk_count > 0
+            response.fragment_name = fragment_name
+            response.is_present = fragment_found
             response.node_id = node_id
-            response.count = chunk_count
 
             repair_sender.send(response.SerializeToString())
 
         elif header.request_type == messages_pb2.FRAGMENT_DATA_REQ:
             # Fragment data request - same implementation as serving normal data
             # requests, except for the different socket the response is sent on
-            # and the incoming request's format.
-            # This is currently only used by Reed-Solomon, which stores a single
-            # chunk per storage node.
             task = messages_pb2.getdata_request()
             task.ParseFromString(msg[2])
 
             filename = task.filename
             print("Data chunk request: %s" % filename)
 
-            #Try to load all fragments with this name
-            #First frame of the response is the filename
-            frames = [bytes(filename, 'utf-8')]
-            #Subsequent frames will contain the file data
-            for i in range(0, MAX_CHUNKS_PER_FILE):
-                try:
-                    with open(data_folder+'/'+filename+"."+str(i), "rb") as in_file:
-                        print("Found chunk %s, sending it back" % filename)
-                        # Add chunk as a new frame
-                        frames.append(in_file.read())
-
-                except FileNotFoundError:
-                    # This is OK here
-                    break
-
-            #Only send a result if at least one chunk was found
-            if(len(frames)>1):
-                sender.send_multipart(frames)
-
-        elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
-            # TO BE DONE
+            # Try to load the requested file from the local file system,
+            # send response only if found
+            try:
+                with open(data_folder+'/'+filename, "rb") as in_file:
+                    print("Found chunk %s, sending it back" % filename)
+                    
+                    repair_sender.send_multipart([
+                        bytes(filename, 'utf-8'),
+                        in_file.read()
+                    ])
+            except FileNotFoundError:
+                # This is OK here
+                pass
 
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
-           pass
+            #Fragment store request - same implementation as serving normal data
+            # requests, except for the different socket the response is sent on
+            task = messages_pb2.storedata_request()
+            task.ParseFromString(msg[2])
+
+            # The data is the third frame
+            data = msg[3]
+
+            print('Chunk to save: %s, size: %d bytes' % (task.filename, len(data)))
+            
+            # Store the chunk with the given filename
+            chunk_local_path = data_folder+'/'+task.filename
+            write_file(data, chunk_local_path)
+            print("Chunk saved to %s" % chunk_local_path)
+
+            # Send response (just the file name)
+            repair_sender.send_string(task.filename)
 
         else:
             print("Message type not supported")
