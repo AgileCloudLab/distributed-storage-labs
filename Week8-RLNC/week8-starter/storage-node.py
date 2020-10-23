@@ -210,6 +210,8 @@ while True:
                 # This is OK here
                 pass
 
+        #TO BE DONE: placeholder for handling recoded requests
+
         elif header.request_type == messages_pb2.STORE_FRAGMENT_DATA_REQ:
             #Fragment store request - same implementation as serving normal data
             # requests, except for the different socket the response is sent on

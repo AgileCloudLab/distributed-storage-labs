@@ -226,7 +226,7 @@ while True:
 
             #Only send a result if at least one chunk was found
             if(len(frames)>1):
-                sender.send_multipart(frames)
+                repair_sender.send_multipart(frames)
 
         elif header.request_type == messages_pb2.RECODE_FRAGMENTS_REQ:
             # Recode fragment data request, specific to RLNC repairs

@@ -413,4 +413,4 @@ def start_repair_process(files, repair_socket, repair_response_socket):
         total_missing_subfragment_count += missing_subfragment_count
         total_repaired_subfragment_count += repaired_subfragment_count
 
-    return total_repaired_subfragment_count, total_repaired_subfragment_count
+    return total_missing_subfragment_count, total_repaired_subfragment_count
