@@ -35,48 +35,21 @@ def hello():
     return make_response({'message': 'Namenode'})
 #
 
-@app.route('/files',  methods=['GET'])
-def list_files():
-    db = utils.get_db()
-    cursor = db.execute("SELECT * FROM `file`")
-    if not cursor: 
-        return make_response({"message": "Error connecting to the database"}, 500)
-    
-    files = cursor.fetchall()
-    # Convert files from sqlite3.Row object (which is not JSON-encodable) to 
-    # a standard Python dictionary simply by casting
-    files = [dict(file) for file in files]
-    
-    return make_response({"files": files})
-#
 
-@app.route('/files', methods=['POST'])
-def add_files():
-    payload = request.get_json()
-    filename = payload.get('filename')
-    filetype = payload.get('type')
-    size = payload.get('size')
+"""
+TODO Add the REST endpoints here
 
-    # Select 2 random datanodes (without repetition) to store the file replicas
-    replica_locations = random.sample(DATANODE_ADDRESSES, k=2)
+Namenode - Add new file
+Endpoint: POST /files 
+Request body: JSON object with the filename, size and mime type
+Response: File ID and 2 random Datanode addresses
 
-    # Insert the File record in the DB
-    db = utils.get_db()
-    cursor = db.execute(
-        "INSERT INTO `file`(`filename`, `size`, `type`, `replica_locations`) VALUES (?,?,?,?)",
-        (filename, size, filetype, ' '.join(replica_locations))
-    )
-    db.commit()
-    file_id = cursor.lastrowid
+Namenode - List files
+Endpoint: GET /files
+Request body: Empty
+Response: List of File objects (ID, filename, size, mime type, list of datanode addresses)
+"""
 
-    # Return the new file ID and the replica locations (datanode addresses)
-    result = {
-        "id":  file_id, 
-        "replica_locations": replica_locations
-    }
-    
-    return make_response(result, 201)
-#
 
 # Start the Flask app (must be after the endpoint functions) 
 host_local_computer = "localhost" # Listen for connections on the local computer

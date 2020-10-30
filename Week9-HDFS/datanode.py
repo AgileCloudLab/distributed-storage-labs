@@ -22,6 +22,10 @@ app = Flask(__name__)
 
 @app.after_request
 def add_cors_headers(response):
+    """
+    Add Cross-Origin Resource Sharing headers to every response.
+    Without these the browser does not allow the HDFS webapp to process the response.
+    """
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Authorization,Content-Type'
     response.headers['access-control-allow-methods'] = 'DELETE, GET, OPTIONS, POST, PUT'
@@ -79,4 +83,5 @@ def read_file(file_id):
 host_local_computer = "localhost" # Listen for connections on the local computer
 host_local_network = "0.0.0.0" # Listen for connections on the local network
 port = 9000 if utils.is_raspberry_pi() else random.randint(9000, 9500)
+print("Starting Datanode on port %d\n\n" % port)
 app.run(host=host_local_network if utils.is_raspberry_pi() else host_local_computer, port=port)
