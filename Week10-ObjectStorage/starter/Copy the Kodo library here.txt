@@ -1,0 +1,14 @@
+In order to run the system on your computer, you need to make the compiled Kodo-Python 
+library available for both the REST server and the storage node. We included it only for 
+the Raspberry PI (kodo.cpython-35m-arm-linux-gnueabihf.so). 
+
+To do that, you need to build the Kodo-Python library on your computer. This should have 
+been done already for Lab 6 (Reed Solomon). If you haven't, please follow the instructions
+at https://github.com/steinwurf/kodo-python.
+
+After successfully building Kodo-Python, the compiled binary library will be under the 
+/build_current folder. Copy it (or make a symlink) to this folder, right next to rest-
+server.py and rlnc.py
+
+When deploying the system to the Raspberry Pi Stack, copy the kodo.cpython-35m-arm-linux-
+gnueabihf.so library together with the python source files.
