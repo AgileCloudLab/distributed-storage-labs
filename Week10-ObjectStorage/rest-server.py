@@ -16,7 +16,6 @@ import atexit # unregister scheduler at app exit
 import raid1
 import reedsolomon
 import rlnc
-import s3
 import utils
 
 # Initiate ZMQ sockets
@@ -131,6 +130,34 @@ def download_file(file_id):
             data_req_socket, 
             response_socket
         )
+    
+    elif f['storage_mode'] == 's3':
+        # Download the file contents from Amazon S3
+        import s3
+        
+        file_data = s3.get_file(
+            region=storage_details['region'], 
+            bucket_name=storage_details['bucket'], 
+            object_key=storage_details['object']
+        )
+
+        """
+        presigned_url = s3.get_presigned_url(
+            region=storage_details['region'], 
+            bucket_name=storage_details['bucket'], 
+            object_key=storage_details['object'],
+            expiration_sec=3600
+        )
+        # Construct a HTTP response with 302 (Moved Temporarily) status code
+        # and set the Location response header to the S3 pre-signed url.
+        response = make_response({}, 302)
+        response.headers['Location'] = presigned_url
+        return response
+        """
+   
+    else:
+        logging.error("Unexpected storage mode: %s" % f['storage_mode'])
+        return make_response("Unexpected storage mode: {}".format(f['storage_mode']), 400)
 
     return send_file(io.BytesIO(file_data), mimetype=f['content_type'])
 #
@@ -248,14 +275,15 @@ def add_files_multipart():
     
     elif storage_mode == 's3':
         # Store the file contents in Amazon S3
-        
+        import s3
 
-        # Additional parameter: region code 
+        # Read region code from the request
         region = payload.get('s3_region') 
 
         # Upload the file to S3
-        bucket_name, object_key = s3.store_file(data, region)
-
+        bucket_name, object_key = s3.store_file(data, region, content_type)
+        
+        # Construct the dict that goes into the 'storage_details' DB field
         storage_details = {
             "region": region,
             "bucket": bucket_name,
