@@ -28,6 +28,8 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
     :return: A list of the coded fragment names, e.g. (c1,c2,c3,c4)
     """
 
+    file_data = bytearray(file_data)
+
     # Make sure we can realize max_erasures with 4 storage nodes
     assert(max_erasures >= 0)
     assert(max_erasures < STORAGE_NODES_NUM)
@@ -37,8 +39,11 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
     # The size of one coded fragment (total size/number of symbols, rounded up)
     symbol_size = math.ceil(len(file_data)/symbols)
     # Kodo RLNC encoder using 2^8 finite field
-    encoder = kodo.RLNCEncoder(kodo.field.binary8, symbols, symbol_size)
+    encoder = kodo.block.Encoder(kodo.FiniteField.binary8)
+    encoder.configure(symbols, symbol_size)
     encoder.set_symbols_storage(file_data)
+
+    symbol = bytearray(encoder.symbol_bytes)
 
     fragment_names = []
 
@@ -48,7 +53,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
         coefficients = RS_CAUCHY_COEFFS[i]
         # Generate a coded fragment with these coefficients 
         # (trim the coeffs to the actual length we need)
-        symbol = encoder.produce_symbol(coefficients[:symbols])
+        encoder.encode_symbol(symbol, coefficients[:symbols])
         # Generate a random name for it and save
         name = random_string(8)
         fragment_names.append(name)
@@ -59,7 +64,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
 
         send_task_socket.send_multipart([
             task.SerializeToString(),
-            bytearray(symbol)
+            symbol
         ])
     
     # Wait until we receive a response for every fragment
@@ -68,7 +73,6 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
         print('Received: %s' % resp)
 
     return fragment_names
-#
 
 def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response_socket):
     """
@@ -111,8 +115,9 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
     # Reconstruct the original data with a decoder
     symbols_num = len(symbols)
     symbol_size = len(symbols[0]['data'])
-    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    data_out = bytearray(decoder.block_size())
+    decoder = kodo.block.Decoder(kodo.FiniteField.binary8)
+    decoder.configure(symbols_num, symbol_size)
+    data_out = bytearray(decoder.block_bytes)
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
@@ -122,11 +127,10 @@ def get_file(coded_fragments, max_erasures, file_size, data_req_socket, response
         coefficients = RS_CAUCHY_COEFFS[coeff_idx]
         # Use the same coefficients for decoding (trim the coefficients to 
         # symbols_num to avoid nasty bugs)
-        decoder.consume_symbol(symbol['data'], coefficients[:symbols_num])
+        decoder.decode_symbol(bytearray(symbol['data']), coefficients[:symbols_num])
 
     
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())
 
     return data_out[:file_size]
-#

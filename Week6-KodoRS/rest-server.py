@@ -1,7 +1,7 @@
 """
 Aarhus University - Distributed Storage course - Lab 6
 
-REST API + RAID Controller
+REST API
 """
 from flask import Flask, make_response, g, request, send_file
 import sqlite3
@@ -128,6 +128,7 @@ def download_file(file_id):
             data_req_socket, 
             response_socket
         )
+
 
     return send_file(io.BytesIO(file_data), mimetype=f['content_type'])
 #
