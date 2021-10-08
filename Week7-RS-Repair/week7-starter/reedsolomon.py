@@ -43,8 +43,10 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
     # The size of one coded fragment (total size/number of symbols, rounded up)
     symbol_size = math.ceil(len(file_data)/symbols)
     # Kodo RLNC encoder using 2^8 finite field
-    encoder = kodo.RLNCEncoder(kodo.field.binary8, symbols, symbol_size)
+    encoder = kodo.block.Encoder(kodo.FiniteField.binary8)
+    encoder.configure(symbols, symbol_size)
     encoder.set_symbols_storage(file_data)
+    symbol = bytearray(encoder.symbol_bytes)
 
     fragment_names = []
 
@@ -54,7 +56,7 @@ def store_file(file_data, max_erasures, send_task_socket, response_socket):
         coefficients = RS_CAUCHY_COEFFS[i]
         # Generate a coded fragment with these coefficients 
         # (trim the coeffs to the actual length we need)
-        symbol = encoder.produce_symbol(coefficients[:symbols])
+        encoder.encode_symbol(symbol, coefficients[:symbols])
         # Generate a random name for it and save
         name = random_string(8)
         fragment_names.append(name)
@@ -89,8 +91,9 @@ def decode_file(symbols):
     # Reconstruct the original data with a decoder
     symbols_num = len(symbols)
     symbol_size = len(symbols[0]['data']) - symbols_num #subtract the coefficients' size
-    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    data_out = bytearray(decoder.block_size())
+    decoder = kodo.block.Decoder(kodo.FiniteField.binary8)
+    decoder.configure(symbols_num, symbol_size)
+    data_out = bytearray(decoder.block_bytes)
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
@@ -98,7 +101,7 @@ def decode_file(symbols):
         coefficients = symbol['data'][:symbols_num]
         symbol_data = symbol['data'][symbols_num:]
         # Feed it to the decoder
-        decoder.consume_symbol(symbol_data, coefficients)
+        decoder.decode_symbol(symbol_data, coefficients)
 
     # Make sure the decoder successfully reconstructed the file
     assert(decoder.is_complete())

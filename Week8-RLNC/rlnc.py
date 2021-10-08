@@ -35,8 +35,10 @@ def store_file(file_data, max_erasures, subfragments_per_node,
     # The size of one coded subfragment (total size/number of symbols, rounded up)
     symbol_size = math.ceil(len(file_data)/symbols)
     # Kodo RLNC encoder using 2^8 finite field
-    encoder = kodo.RLNCEncoder(kodo.field.binary8, symbols, symbol_size)
+    encoder = kodo.block.Encoder(kodo.FiniteField.binary8)
+    encoder.configure(symbols, symbol_size)
     encoder.set_symbols_storage(file_data)
+    symbol = bytearray(encoder.symbol_bytes)
 
     fragment_names = []
 
@@ -59,7 +61,7 @@ def store_file(file_data, max_erasures, subfragments_per_node,
             # Create a random coefficient vector
             coefficients = encoder.generate()
             # Generate a coded fragment with these coefficients 
-            symbol = encoder.produce_symbol(coefficients)
+            encoder.encode_symbol(symbol, coefficients)
             frames.append(coefficients + bytearray(symbol))
 
         # Send all frames as a single multipart message
@@ -88,8 +90,9 @@ def decode_file(symbols):
     # Reconstruct the original data with a decoder
     symbols_num = len(symbols)
     symbol_size = len(symbols[0]['data']) - symbols_num #subtract the coefficients' size
-    decoder = kodo.RLNCDecoder(kodo.field.binary8, symbols_num, symbol_size)
-    data_out = bytearray(decoder.block_size())
+    decoder = kodo.block.Decoder(kodo.FiniteField.binary8)
+    decoder.configure(symbols_num, symbol_size)
+    data_out = bytearray(decoder.block_bytes)
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
@@ -97,7 +100,7 @@ def decode_file(symbols):
         coefficients = symbol['data'][:symbols_num]
         symbol_data = symbol['data'][symbols_num:]
         # Feed it to the decoder
-        decoder.consume_symbol(symbol_data, coefficients)
+        decoder.decode_symbol(symbol_data, coefficients)
 
     # Check that the decoder successfully reconstructed the file
     if(decoder.is_complete()):
@@ -127,26 +130,44 @@ def recode(symbols, symbol_count, output_symbol_count):
     """
 
     symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
-    recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
+    #recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
+    recoder = kodo.block.Decoder(kodo.FiniteField.binary8)
+    recoder.configure(symbol_count, symbol_size)
+    
+    # TODO check if the next 2 lines are needed, probably not
+    recoded_data_out = bytearray(recoder.block_bytes)
+    recoder.set_symbols_storage(recoded_data_out)
 
-    # Feed the provided symbols to the decoder
+    # Random coefficient generator, will be used for the recoded symbols
+    generator = kodo.block.generator.RandomUniform(field)
+    generator.configure(symbol_count)
+
+    # Allocate buffers for where the recoded symbols (coeffs and data) will be produced
+    # Recoding requires 2 coefficient buffers
+    recoding_coefficients = bytearray(generator.max_coefficients_bytes)
+    coefficients_out = bytearray(generator.max_coefficients_bytes)
+    recoded_symbol = bytearray(symbol_size)
+
+    # Feed the provided symbols to the Recoder
     for symbol in symbols:
         # Separate the coefficients from the symbol data
         coefficients = symbol[:symbol_count]
         symbol_data = symbol[symbol_count:]
         # Feed it to the recoder
-        recoder.consume_symbol(symbol_data, coefficients)
+        recoder.decode_symbol(symbol_data, coefficients)
 
-    # Use recoding to generate new symbols
+    # Generate new recoded symbols
     output_symbols = []
     for i in range(output_symbol_count):
-        # Recoding coefficients are used during the recoding process
-        recoding_coefficients = recoder.recoder_generate()
-        # Recoded coefficients can be used when decoding
-        recoded_symbol, recoded_symbol_coefficients = \
-            recoder.recoder_produce_symbol(recoding_coefficients)
-        #Add the recoded coefficients in front of the symbol data
-        output_symbols.append(recoded_symbol_coefficients + recoded_symbol)
+        # Generate recoding coeffs
+        generator.generate_recode(recoding_coefficients, recoder)
+        # Perform recoding, capture the final coefficients that produced the recoded symbol
+        
+        recoder.recode_symbol(recoded_symbol, coefficients_out, recoding_coefficients)
+
+        # Save the new recoded symbol and its coeffs to output_symbols
+        output_symbols.append(coefficients_out + recoded_symbol)
+    #
 
     return output_symbols
 #
