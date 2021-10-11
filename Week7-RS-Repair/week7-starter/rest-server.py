@@ -1,7 +1,7 @@
 """
 Aarhus University - Distributed Storage course - Lab 7
 
-REST API + RAID Controller
+REST API
 """
 from flask import Flask, make_response, g, request, send_file
 import sqlite3
