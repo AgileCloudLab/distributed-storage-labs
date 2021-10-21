@@ -35,11 +35,20 @@ def store_file(file_data, max_erasures, subfragments_per_node,
     # The size of one coded subfragment (total size/number of symbols, rounded up)
     symbol_size = math.ceil(len(file_data)/symbols)
     # Kodo RLNC encoder using 2^8 finite field
-    encoder = kodo.block.Encoder(kodo.FiniteField.binary8)
+    field = kodo.FiniteField.binary8
+    encoder = kodo.block.Encoder(field)
     encoder.configure(symbols, symbol_size)
     encoder.set_symbols_storage(file_data)
+    # Preallocate array for a coded symbol (avoid allocation in a loop)
     symbol = bytearray(encoder.symbol_bytes)
 
+    # Random coefficient generator 
+    generator = kodo.block.generator.RandomUniform(field)
+    generator.configure(encoder.symbols)
+    # Preallocate array for coefficients (avoid allocation in a loop)
+    coefficients = bytearray(generator.max_coefficients_bytes)
+
+    # Store the generated fragment names
     fragment_names = []
 
     # Generate several coded subfragments for each Storage Node
@@ -49,22 +58,24 @@ def store_file(file_data, max_erasures, subfragments_per_node,
         name = random_string(8)
         fragment_names.append(name)
         
-        # Send a Protobuf STORE DATA request to the Storage Nodes
+        # Prepare a multi-frame ZMQ message that includes the 
+        # fragment name and all subfragments.
+        frames = [] 
+
+        # First frame: a Protobuf STORE DATA message
         task = messages_pb2.storedata_request()
         task.filename = name
-        
-        # Stores all subfragments that go to one Storage node
-        # First frame contains the task
-        frames = [task.SerializeToString()] 
+        frames.append(task.SerializeToString())
 
         for j in range(subfragments_per_node):
-            # Create a random coefficient vector
-            coefficients = encoder.generate()
-            # Generate a coded fragment with these coefficients 
+            # Generate a fresh set of coefficients
+            generator.generate(coefficients)
+            # Generate a coded symbol with these coefficients 
             encoder.encode_symbol(symbol, coefficients)
+            # Add to the message frames
             frames.append(coefficients + bytearray(symbol))
 
-        # Send all frames as a single multipart message
+        # Send all frames as a multipart message
         send_task_socket.send_multipart(frames)
  
     # Wait until we receive a response for every message
@@ -96,17 +107,20 @@ def decode_file(symbols):
     decoder.set_symbols_storage(data_out)
 
     for symbol in symbols:
-        # Separate the coefficients from the symbol data
+        # Separate the coefficients from the symbol data 
+        # (we know they are in the front and there are 'symbols_num' of them)
         coefficients = symbol['data'][:symbols_num]
         symbol_data = symbol['data'][symbols_num:]
         # Feed it to the decoder
         decoder.decode_symbol(symbol_data, coefficients)
-
+        print(f"Decoder rank: {decoder.rank}")
+    
+    
     # Check that the decoder successfully reconstructed the file
     if(decoder.is_complete()):
         print("File decoded successfully")
     else:
-        print("Decoding file failed! Decoder rank %s from %s symbols" % (decoder.rank(), len(symbols)))
+        print(f"Decoding file failed! Decoder rank {decoder.rank} after {len(symbols)} symbols")
         # In a real system we might add more complex error handling
 
     return data_out
@@ -131,7 +145,8 @@ def recode(symbols, symbol_count, output_symbol_count):
 
     symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
     #recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
-    recoder = kodo.block.Decoder(kodo.FiniteField.binary8)
+    field = kodo.FiniteField.binary8
+    recoder = kodo.block.Decoder(field)
     recoder.configure(symbol_count, symbol_size)
     
     # TODO check if the next 2 lines are needed, probably not
@@ -159,10 +174,10 @@ def recode(symbols, symbol_count, output_symbol_count):
     # Generate new recoded symbols
     output_symbols = []
     for i in range(output_symbol_count):
-        # Generate recoding coeffs
+        # Generate fresh recoding multipliers
         generator.generate_recode(recoding_coefficients, recoder)
+
         # Perform recoding, capture the final coefficients that produced the recoded symbol
-        
         recoder.recode_symbol(recoded_symbol, coefficients_out, recoding_coefficients)
 
         # Save the new recoded symbol and its coeffs to output_symbols

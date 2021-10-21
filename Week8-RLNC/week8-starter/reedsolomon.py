@@ -285,6 +285,7 @@ def start_repair_process(files, repair_socket, repair_response_socket):
             encoder = kodo.block.Encoder(kodo.FiniteField.binary8)
             encoder.configure(symbols, symbol_size)
             encoder.set_symbols_storage(file_data)
+            symbol = bytearray(encoder.symbol_bytes)
 
             # Re-encode each missing fragment: 
             for missing_fragment in missing_fragments:
