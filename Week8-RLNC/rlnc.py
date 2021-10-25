@@ -88,7 +88,7 @@ def store_file(file_data, max_erasures, subfragments_per_node,
 #
 
 
-def decode_file(symbols):
+def __decode_file(symbols):
     """
     Decode a file using RLNC decoder and the provided coded symbols.
     The number of symbols must be the same as (STORAGE_NODES_NUM - max_erasures) *
@@ -175,10 +175,8 @@ def recode(symbols, symbol_count, output_symbol_count):
     for i in range(output_symbol_count):
         # Generate fresh recoding multipliers
         generator.generate_recode(recoding_coefficients, recoder)
-
         # Perform recoding, capture the final coefficients that produced the recoded symbol
         recoder.recode_symbol(recoded_symbol, coefficients_out, recoding_coefficients)
-
         # Save the new recoded symbol and its coeffs to output_symbols
         output_symbols.append(coefficients_out + recoded_symbol)
     #
@@ -223,7 +221,7 @@ def get_file(coded_fragments, max_erasures, file_size,
     print("All coded fragments received successfully")
 
     #Reconstruct the original file data
-    file_data = decode_file(symbols)
+    file_data = __decode_file(symbols)
 
     return file_data[:file_size]
 #
