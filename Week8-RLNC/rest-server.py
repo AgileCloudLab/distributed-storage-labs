@@ -267,6 +267,8 @@ def add_files_multipart():
             "max_erasures": max_erasures,
             "subfragments_per_node": subfragments_per_node
         }
+
+        print(f"File stored: {storage_details}")
         
     else:
         logging.error("Unexpected storage mode: %s" % storage_mode)

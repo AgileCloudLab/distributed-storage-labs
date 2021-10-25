@@ -5,6 +5,7 @@ import copy # for deepcopy
 from utils import random_string
 import messages_pb2
 import json
+import logging
 
 STORAGE_NODES_NUM = 4
 
@@ -144,14 +145,12 @@ def recode(symbols, symbol_count, output_symbol_count):
     """
 
     symbol_size = len(symbols[0]) - symbol_count #subtract the coefficients' size
-    #recoder = kodo.RLNCPureRecoder(kodo.field.binary8, symbol_count, symbol_size, symbol_count)
     field = kodo.FiniteField.binary8
+    # Set up the recoder
     recoder = kodo.block.Decoder(field)
     recoder.configure(symbol_count, symbol_size)
-    
-    # TODO check if the next 2 lines are needed, probably not
-    recoded_data_out = bytearray(recoder.block_bytes)
-    recoder.set_symbols_storage(recoded_data_out)
+    recoder_internal_storage = bytearray(recoder.block_bytes)
+    recoder.set_symbols_storage(recoder_internal_storage)
 
     # Random coefficient generator, will be used for the recoded symbols
     generator = kodo.block.generator.RandomUniform(field)
@@ -271,30 +270,31 @@ def __store_repair_fragments(missing_fragments, partially_missing_fragments,
         for task_nbr in range(len(missing_fragments)):
             resp = repair_response_socket.recv_string()
             print('Repaired fully missing fragment: %s' % resp)
+    # End store fully missing fragments
 
-        # 2. Partially missing fragments
-        for fragment in partially_missing_fragments:
-            task = messages_pb2.storedata_request()
-            task.filename = fragment["name"]
+    # 2. Partially missing fragments
+    for fragment in partially_missing_fragments:
+        task = messages_pb2.storedata_request()
+        task.filename = fragment["name"]
 
-            header = messages_pb2.header()
-            header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
+        header = messages_pb2.header()
+        header.request_type = messages_pb2.STORE_FRAGMENT_DATA_REQ
 
-            frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
-                      header.SerializeToString(),
-                      task.SerializeToString()]
+        frames = [fragment["node_id"].encode('UTF-8'), #Use the node_id as the topic
+                    header.SerializeToString(),
+                    task.SerializeToString()]
 
-            for i in range(number_of_repaired_subfragments,
-                           number_of_repaired_subfragments + fragment["subfragments_lost"]):
-                frames.append(bytearray(repair_symbols[i]))
+        for i in range(number_of_repaired_subfragments,
+                        number_of_repaired_subfragments + fragment["subfragments_lost"]):
+            frames.append(bytearray(repair_symbols[i]))
 
-            number_of_repaired_subfragments += fragment["subfragments_lost"]
-            repair_socket.send_multipart(frames)
+        number_of_repaired_subfragments += fragment["subfragments_lost"]
+        repair_socket.send_multipart(frames)
 
-        # Wait until we receive a response for every fragment
-        for task_nbr in range(len(partially_missing_fragments)):
-            resp = repair_response_socket.recv_string()
-            print('Repaired partially missing fragment: %s' % resp)
+    # Wait until we receive a response for every fragment
+    for task_nbr in range(len(partially_missing_fragments)):
+        resp = repair_response_socket.recv_string()
+        print('Repaired partially missing fragment: %s' % resp)
 
     return number_of_repaired_subfragments
 #
