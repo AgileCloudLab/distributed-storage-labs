@@ -266,10 +266,10 @@ def __store_repair_fragments(missing_fragments, partially_missing_fragments,
         number_of_repaired_subfragments += subfragments_per_node
         repair_socket.send_multipart(frames)
 
-        # Wait until we receive a response for every fragment
-        for task_nbr in range(len(missing_fragments)):
-            resp = repair_response_socket.recv_string()
-            print('Repaired fully missing fragment: %s' % resp)
+    # Wait until we receive a response for every fragment
+    for task_nbr in range(len(missing_fragments)):
+        resp = repair_response_socket.recv_string()
+        print('Repaired fully missing fragment: %s' % resp)
     # End store fully missing fragments
 
     # 2. Partially missing fragments
