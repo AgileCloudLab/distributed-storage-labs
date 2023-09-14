@@ -149,6 +149,59 @@ def download_file(file_id):
     return send_file(io.BytesIO(file_data), mimetype=f['content_type'])
 #
 
+@app.route('/files', methods=['POST'])
+def add_files():
+    payload = request.get_json()
+    filename = payload.get('filename')
+    content_type = payload.get('content_type')
+    file_data = base64.b64decode(payload.get('contents_b64'))
+    size = len(file_data)
+
+    # RAID 1: cut the file in half and store both halves 2x
+    file_data_1 = file_data[:math.ceil(size/2.0)]
+    file_data_2 = file_data[math.ceil(size/2.0):]
+
+    # Generate two random chunk names for each half
+    file_data_1_names = [random_string(8), random_string(8)]
+    file_data_2_names = [random_string(8), random_string(8)]
+    print(f"Filenames for part 1: {file_data_1_names}")
+    print(f"Filenames for part 2: {file_data_2_names}")
+
+    # Send 2 'store data' Protobuf requests with the first half and chunk names
+    for name in file_data_1_names:
+        task = messages_pb2.storedata_request()
+        task.filename = name
+        send_task_socket.send_multipart([
+            task.SerializeToString(),
+            file_data_1
+        ])
+
+    # Send 2 'store data' Protobuf requests with the second half and chunk names
+    for name in file_data_2_names:
+        task = messages_pb2.storedata_request()
+        task.filename = name
+        send_task_socket.send_multipart([
+            task.SerializeToString(),
+            file_data_2
+        ])
+        
+    # Wait until we receive 4 responses from the workers
+    for task_nbr in range(4):
+        resp = response_socket.recv_string()
+    print(f"Received: {resp}")
+
+    # At this point all chunks are stored, insert the File record in the DB
+
+    # Insert the File record in the DB
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO `file`(`filename`, `size`, `content_type`, `part1_filenames`, `part2_filenames`) VALUES (?,?,?,?,?)",
+        (filename, size, content_type, ','.join(file_data_1_names), ','.join(file_data_2_names))
+    )
+    db.commit()
+
+
+
 # HTTP HEAD requests are served by the GET endpoint of the same URL,
 # so we'll introduce a new endpoint URL for requesting file metadata.
 @app.route('/files/<int:file_id>/info',  methods=['GET'])
@@ -205,4 +258,4 @@ def server_error(e):
 # Start the Flask app (must be after the endpoint functions) 
 host_local_computer = "localhost" # Listen for connections on the local computer
 host_local_network = "0.0.0.0" # Listen for connections on the local network
-app.run(host=host_local_network, port=9000)
+app.run(host=host_local_computer, port=9000)
